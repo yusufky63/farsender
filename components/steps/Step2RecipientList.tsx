@@ -92,12 +92,23 @@ export function Step2RecipientList({ config, onConfigChange, onNext, onPrev }: S
     const formattedUsername = formatFarcasterUsername(input)
     if (!formattedUsername) return
 
+    // Double check that input still matches current state
+    if (newAddress.trim() !== input.trim()) {
+      return // Input has changed, abort this lookup
+    }
+
     setIsLoadingFarcaster(true)
     setFarcasterError('')
     setFarcasterUser(null)
 
     try {
       const user = await neynarAPI.getUserByUsername(formattedUsername)
+      
+      // Check again if input has changed during API call
+      if (newAddress.trim() !== input.trim()) {
+        return // Input has changed, ignore result
+      }
+      
       if (user) {
         const farcasterUser = convertNeynarUser(user)
         setFarcasterUser(farcasterUser)
@@ -106,6 +117,11 @@ export function Step2RecipientList({ config, onConfigChange, onNext, onPrev }: S
         setFarcasterError('Farcaster user not found')
       }
     } catch (error) {
+      // Check if input has changed during error
+      if (newAddress.trim() !== input.trim()) {
+        return // Input has changed, ignore error
+      }
+      
       console.error('Farcaster lookup failed:', error)
       const errorMessage = error instanceof Error ? error.message : 'Failed to lookup Farcaster user'
       
@@ -122,7 +138,7 @@ export function Step2RecipientList({ config, onConfigChange, onNext, onPrev }: S
     } finally {
       setIsLoadingFarcaster(false)
     }
-  }, [neynarAPI])
+  }, [neynarAPI, newAddress])
 
   // Handle Base.eth domain lookup
   const handleBaseEthLookup = useCallback(async (input: string) => {
@@ -131,18 +147,34 @@ export function Step2RecipientList({ config, onConfigChange, onNext, onPrev }: S
     const formattedDomain = formatBaseEthDomain(input)
     if (!formattedDomain) return
 
+    // Double check that input still matches current state
+    if (newAddress.trim() !== input.trim()) {
+      return // Input has changed, abort this lookup
+    }
+
     setBaseEthUser(null)
 
     try {
       const user = await resolveBaseEthDomain(formattedDomain)
+      
+      // Check again if input has changed during API call
+      if (newAddress.trim() !== input.trim()) {
+        return // Input has changed, ignore result
+      }
+      
       if (user) {
         setBaseEthUser(user)
         setSelectedAddress(user.address)
       }
     } catch (error) {
+      // Check if input has changed during error
+      if (newAddress.trim() !== input.trim()) {
+        return // Input has changed, ignore error
+      }
+      
       console.error('Base.eth lookup failed:', error)
     }
-  }, [resolveBaseEthDomain])
+  }, [resolveBaseEthDomain, newAddress])
 
   // Debounced lookup for both Farcaster and Base.eth
   useEffect(() => {
@@ -150,20 +182,33 @@ export function Step2RecipientList({ config, onConfigChange, onNext, onPrev }: S
       setFarcasterUser(null)
       setFarcasterError('')
       setBaseEthUser(null)
+      setSelectedAddress('')
+      setShowAlternateAddresses(false)
       return
     }
 
     const timeoutId = setTimeout(() => {
+      // Only proceed if input still has content
+      if (!newAddress.trim()) {
+        setFarcasterUser(null)
+        setBaseEthUser(null)
+        setSelectedAddress('')
+        setShowAlternateAddresses(false)
+        return
+      }
+      
       // Clear previous results
       setFarcasterUser(null)
       setBaseEthUser(null)
+      setSelectedAddress('')
+      setShowAlternateAddresses(false)
       
       if (isFarcasterUsername(newAddress)) {
         handleFarcasterLookup(newAddress)
       } else if (isBaseEthDomain(newAddress)) {
         handleBaseEthLookup(newAddress)
       }
-    }, 300) // 0.3 second debounce to avoid excessive API calls
+    }, 500) // Increased debounce to 0.5 second to avoid excessive API calls
 
     return () => clearTimeout(timeoutId)
   }, [newAddress, handleFarcasterLookup, handleBaseEthLookup])
@@ -536,13 +581,46 @@ export function Step2RecipientList({ config, onConfigChange, onNext, onPrev }: S
                             width={32}
                             height={32}
                             className="w-full h-full object-cover"
+                            onError={(e) => {
+                              // Fallback to default icon if image fails to load
+                              const target = e.target as HTMLImageElement
+                              target.style.display = 'none'
+                              const parent = target.parentElement
+                              if (parent) {
+                                parent.innerHTML = `
+                                  <img 
+                                    src="https://github.com/zkcodex/zkCodex-Assets/blob/main/Icons/default.png?raw=true" 
+                                    alt="Default" 
+                                    class="w-full h-full object-cover"
+                                    onerror="this.style.display='none'; this.parentElement.innerHTML='<div class=\\"w-full h-full flex items-center justify-center bg-blue-100 dark:bg-blue-900\\"><span class=\\"text-blue-600 dark:text-blue-400 font-medium text-xs\\">${farcasterUser.displayName.charAt(0).toUpperCase()}</span></div>'"
+                                  />
+                                `
+                              }
+                            }}
                           />
                         ) : (
-                          <div className="w-full h-full flex items-center justify-center bg-blue-100 dark:bg-blue-900">
-                            <span className="text-blue-600 dark:text-blue-400 font-medium text-xs">
-                              {farcasterUser.displayName.charAt(0).toUpperCase()}
-                            </span>
-                          </div>
+                          <Image 
+                            src="https://github.com/zkcodex/zkCodex-Assets/blob/main/Icons/default.png?raw=true" 
+                            alt="Default" 
+                            width={32}
+                            height={32}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              // Final fallback to initials
+                              const target = e.target as HTMLImageElement
+                              target.style.display = 'none'
+                              const parent = target.parentElement
+                              if (parent) {
+                                parent.innerHTML = `
+                                  <div class="w-full h-full flex items-center justify-center bg-blue-100 dark:bg-blue-900">
+                                    <span class="text-blue-600 dark:text-blue-400 font-medium text-xs">
+                                      ${farcasterUser.displayName.charAt(0).toUpperCase()}
+                                    </span>
+                                  </div>
+                                `
+                              }
+                            }}
+                          />
                         )}
                       </div>
                       <div className="flex-1 min-w-0">
@@ -576,10 +654,11 @@ export function Step2RecipientList({ config, onConfigChange, onNext, onPrev }: S
                             title="View on BaseScan"
                           >
                             <Image 
-                              src="https://basescan.org/favicon.ico" 
+                              src="https://pbs.twimg.com/profile_images/1947952831568482304/GkEPdf-r_400x400.jpg" 
                               alt="BaseScan" 
                               width={12}
                               height={12}
+                              className="rounded"
                             />
                           </a>
                         </div>
@@ -661,12 +740,29 @@ export function Step2RecipientList({ config, onConfigChange, onNext, onPrev }: S
                 {baseEthUser && (
                   <div className="p-2 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
                     <div className="flex items-center space-x-2">
-                      <div className="w-8 h-8 rounded-full overflow-hidden bg-gray-100 dark:bg-black/30 flex items-center justify-center">
-                        <div className="w-full h-full flex items-center justify-center bg-green-100 dark:bg-green-900">
-                          <span className="text-green-600 dark:text-green-400 font-medium text-xs">
-                            {baseEthUser.domain.charAt(0).toUpperCase()}
-                          </span>
-                        </div>
+                      <div className="w-8 h-8 rounded-full overflow-hidden bg-gray-100 dark:bg-black/30">
+                        <Image 
+                          src="https://github.com/zkcodex/zkCodex-Assets/blob/main/Icons/default.png?raw=true" 
+                          alt="Default" 
+                          width={32}
+                          height={32}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            // Fallback to initials if default icon fails
+                            const target = e.target as HTMLImageElement
+                            target.style.display = 'none'
+                            const parent = target.parentElement
+                            if (parent) {
+                              parent.innerHTML = `
+                                <div class="w-full h-full flex items-center justify-center bg-green-100 dark:bg-green-900">
+                                  <span class="text-green-600 dark:text-green-400 font-medium text-xs">
+                                    ${baseEthUser.domain.charAt(0).toUpperCase()}
+                                  </span>
+                                </div>
+                              `
+                            }
+                          }}
+                        />
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="text-sm font-medium text-gray-900 dark:text-white truncate">
@@ -685,10 +781,11 @@ export function Step2RecipientList({ config, onConfigChange, onNext, onPrev }: S
                             title="View on BaseScan"
                           >
                             <Image 
-                              src="https://basescan.org/favicon.ico" 
+                              src="https://pbs.twimg.com/profile_images/1947952831568482304/GkEPdf-r_400x400.jpg" 
                               alt="BaseScan" 
                               width={12}
                               height={12}
+                              className="rounded"
                             />
                           </a>
                         </div>
@@ -938,10 +1035,11 @@ export function Step2RecipientList({ config, onConfigChange, onNext, onPrev }: S
                             title="View on BaseScan"
                           >
                             <Image 
-                              src="https://basescan.org/favicon.ico" 
+                              src="https://pbs.twimg.com/profile_images/1947952831568482304/GkEPdf-r_400x400.jpg" 
                               alt="BaseScan" 
                               width={12}
                               height={12}
+                              className="rounded"
                             />
                           </a>
                         </div>

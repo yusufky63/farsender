@@ -98,13 +98,13 @@ export function ContractStats() {
               </div>
               <div className="text-xs text-gray-500">Recipients</div>
             </div>
-            
+{/*             
             <div className="text-center">
               <div className="text-lg font-bold text-[#5638a1]">
                 {totalEthSent && typeof totalEthSent === 'bigint' ? parseFloat(formatEther(totalEthSent)).toFixed(1) : '0.0'}
               </div>
               <div className="text-xs text-gray-500">ETH Sent</div>
-            </div>
+            </div> */}
           </div>
         </div>
       </div>
