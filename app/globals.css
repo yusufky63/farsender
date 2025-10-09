@@ -1,0 +1,70 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    @apply font-sans;
+    font-weight: 600;
+  }
+  
+  body {
+    background-color: #f8f8f8;
+    @apply text-gray-900;
+  }
+
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-[#5638a1] hover:bg-[#5638a1]/90 text-white disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors border border-transparent rounded-lg font-medium focus:outline-none focus:ring-2 focus:ring-[#5638a1]/30 backdrop-blur-sm;
+  }
+  
+  .btn-secondary {
+    @apply bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 disabled:bg-gray-50 dark:disabled:bg-gray-900 transition-colors border border-gray-200 dark:border-gray-800 rounded-lg font-medium focus:outline-none focus:ring-2 focus:ring-gray-500;
+  }
+  
+  .btn-outline {
+    @apply border border-gray-200 dark:border-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:border-gray-300 dark:disabled:border-gray-800 disabled:text-gray-400 dark:disabled:text-gray-500 transition-colors rounded-lg font-medium focus:outline-none focus:ring-2 focus:ring-gray-500;
+  }
+  
+  .input-field {
+    @apply w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#5638a1]/30 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400;
+  }
+  
+  .input-field:disabled {
+    @apply bg-gray-50 dark:bg-gray-900 text-gray-400 dark:text-gray-500;
+  }
+  
+  .input-field.error {
+    @apply border-red-500 dark:border-red-400;
+  }
+  
+  .card {
+    @apply bg-white/80 dark:bg-transparent backdrop-blur-sm border border-gray-200 dark:border-gray-800 rounded-lg p-3 shadow-sm;
+  }
+
+  .card-outlined {
+    @apply bg-transparent border-2 border-gray-200 dark:border-gray-800 rounded-lg p-3;
+  }
+
+  .card-elevated {
+    @apply bg-white dark:bg-gray-900 shadow-lg border border-gray-200 dark:border-gray-800 rounded-lg p-3;
+  }
+
+  .info-box {
+    @apply p-4 rounded-lg border border-[#5638a1]/20 dark:border-[#5638a1]/20 bg-[#5638a1]/10 dark:bg-[#5638a1]/10 text-[#5638a1] dark:text-[#5638a1];
+  }
+
+  .success-box {
+    @apply p-4 rounded-lg border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400;
+  }
+
+  .warning-box {
+    @apply p-4 rounded-lg border border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-400;
+  }
+
+  .error-box {
+    @apply p-4 rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400;
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "accountAssociation": {
+    "header": "",
+    "payload": "",
+    "signature": ""
+  },
+  "baseBuilder": {
+    "allowedAddresses": ["0xc0F52851fCAac0cac016432E5e11954632cd2fcB"]
+  },
+  "miniapp": {
+    "version": "1",
+    "name": "FarSender",
+    "homeUrl": "https://farsender.vercel.app/",
+    "iconUrl": "https://farsender.vercel.app/icon.png",
+    "splashImageUrl": "https://farsender.vercel.app/splash.png",
+    "splashBackgroundColor": "#5638a1",
+    "webhookUrl": "https://farsender.vercel.app/api/webhook",
+    "subtitle": "Secure multi-send",
+    "description": "Send ETH and tokens to multiple addresses easily and securely.",
+    "primaryCategory": "finance",
+    "tags": ["multisender", "token", "batch", "sender"],
+    "heroImageUrl": "https://farsender.vercel.app/hero.png",
+    "tagline": "Fast, simple, multi-send",
+    "ogTitle": "FarSender",
+    "ogDescription": "Secure and easy multi-send for ETH and tokens.",
+    "ogImageUrl": "https://farsender.vercel.app/og.png",
+    "noindex": false
+  }
+}
