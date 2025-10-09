@@ -1,6 +1,8 @@
 'use client'
-import { useState, useEffect, useCallback } from 'react'
-import { useAccount, useWriteContract, useWaitForTransactionReceipt, useReadContract } from 'wagmi'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { useAccount, useWriteContract, useWaitForTransactionReceipt, useReadContract, useSendCalls } from 'wagmi'
+import MiniAppSDK from '@farcaster/miniapp-sdk'
+import { encodeFunctionData, toHex, formatUnits } from 'viem'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { StepProps, TransactionStatus } from '@/types'
@@ -14,7 +16,7 @@ import { SuccessModal } from '@/components/SuccessModal'
 export function Step5Transaction({ config, onConfigChange, onNext, onPrev }: StepProps) {
 
   
-  const { address, chain } = useAccount()
+  const { address, chain, isConnected } = useAccount()
   const [transactionStatus, setTransactionStatus] = useState<TransactionStatus>({
     status: 'idle'
   })
@@ -22,20 +24,34 @@ export function Step5Transaction({ config, onConfigChange, onNext, onPrev }: Ste
   const [approvalStatus, setApprovalStatus] = useState<'idle' | 'pending' | 'success' | 'error'>('idle')
   const [isApprovalComplete, setIsApprovalComplete] = useState(false)
   const [isApprovalTransaction, setIsApprovalTransaction] = useState(false)
+  // No chain switching in-app; Farcaster MiniApp may not support it.
   
-  // Get contract info including fee
-  const { flatFee } = useContractInfo(chain?.id || 8453)
+  // Get contract info including fee & recipient limits
+  const { flatFee, maxEthRecipients, maxErc20Recipients } = useContractInfo()
   
   // Get token info
   const { tokenSymbol, tokenName } = useTokenBalance(config.tokenAddress)
 
-  const { writeContract, data: hash, error } = useWriteContract()
-  const { isLoading: isConfirming, isSuccess, isError } = useWaitForTransactionReceipt({
-    hash,
-  })
+  const { writeContract, writeContractAsync, data: writeContractData, isPending: isWriteContractPending } = useWriteContract()
+  const { writeContract: writeContractApproval, writeContractAsync: writeContractApprovalAsync, data: writeContractApprovalData, isPending: isWriteContractApprovalPending } = useWriteContract()
+  const { sendCalls } = useSendCalls()
+  const [transferHash, setTransferHash] = useState<`0x${string}` | undefined>(undefined)
+  const [approvalHash, setApprovalHash] = useState<`0x${string}` | undefined>(undefined)
+  const {
+    isLoading: isTransferConfirming,
+    isSuccess: isTransferSuccess,
+    isError: isTransferError,
+  } = useWaitForTransactionReceipt({ hash: transferHash, chainId: 8453 })
+  const {
+    isLoading: isApprovalConfirming,
+    isSuccess: isApprovalSuccess,
+    isError: isApprovalError,
+  } = useWaitForTransactionReceipt({ hash: approvalHash, chainId: 8453 })
 
   // Get contract address first
-  const contractAddress = chain ? getContractAddress(chain.id) : ''
+  // App is Base-only. Use Base (8453) as canonical chain for contract interactions
+  const BASE_CHAIN_ID = 8453
+  const contractAddress = getContractAddress(BASE_CHAIN_ID) || ''
 
   // Check allowance for ERC20 tokens
   const { data: allowance, refetch: refetchAllowance } = useReadContract({
@@ -56,8 +72,11 @@ export function Step5Transaction({ config, onConfigChange, onNext, onPrev }: Ste
     args: config.tokenType === 'ERC20' && address && contractAddress 
       ? [address, contractAddress] 
       : undefined,
+    chainId: BASE_CHAIN_ID,
     query: {
-      enabled: config.tokenType === 'ERC20' && !!address && !!contractAddress
+      enabled: config.tokenType === 'ERC20' && !!address && !!contractAddress,
+      // While approval is pending, poll allowance so UI can auto-complete even if receipt watcher fails
+      refetchInterval: approvalStatus === 'pending' ? 3000 : undefined,
     }
   })
 
@@ -68,105 +87,277 @@ export function Step5Transaction({ config, onConfigChange, onNext, onPrev }: Ste
 
 
   const isApproved = config.tokenType === 'ETH' || 
-    (allowance && requiredAmount && allowance >= requiredAmount)
+    (allowance && requiredAmount && BigInt(allowance.toString()) >= BigInt(requiredAmount.toString()))
+
+  // Debug logging for approval status
+  useEffect(() => {
+    console.log('🔍 Approval status check:', {
+      tokenType: config.tokenType,
+      allowance: allowance?.toString(),
+      requiredAmount: requiredAmount?.toString(),
+      isApproved,
+      isApprovalComplete,
+      approvalStatus,
+      allowanceBigInt: allowance ? BigInt(allowance.toString()) : null,
+      requiredBigInt: requiredAmount ? BigInt(requiredAmount.toString()) : null
+    })
+  }, [config.tokenType, allowance, requiredAmount, isApproved, isApprovalComplete, approvalStatus])
 
   const totalAmount = calculateTotal(config.recipients.map(r => r.amount))
+  const maxRecipients = config.tokenType === 'ETH' ? Number(maxEthRecipients ?? 300) : Number(maxErc20Recipients ?? 200)
+  const recipientsWithinLimit = config.recipients.length <= maxRecipients
 
+  // When transfer hash is set, mark transaction as pending with hash & start a 30s timeout fallback
+  const transferTimerRef = useRef<number | null>(null)
+  const signingTimerRef = useRef<number | null>(null)
+  const approvalTimerRef = useRef<number | null>(null)
   useEffect(() => {
-    if (hash) {
-      setTransactionStatus({
-        status: 'pending',
-        hash
-      })
+    if (transferHash) {
+      // If we were in signing state, clear it now
+      if (signingTimerRef.current) {
+        clearTimeout(signingTimerRef.current)
+        signingTimerRef.current = null
+      }
+      setTransactionStatus({ status: 'pending', hash: transferHash })
+      if (transferTimerRef.current) {
+        clearTimeout(transferTimerRef.current)
+        transferTimerRef.current = null
+      }
+      transferTimerRef.current = window.setTimeout(() => {
+        setTransactionStatus((prev) => {
+          if (!prev) return prev as any
+          if (prev.status === 'success' || prev.status === 'error') return prev
+          return {
+            ...prev,
+            status: 'idle',
+            message: 'Confirmation is taking longer than usual. You can check the explorer link below.'
+          }
+        })
+      }, 30_000)
     }
-  }, [hash])
+    return () => {
+      if (transferTimerRef.current) {
+        clearTimeout(transferTimerRef.current)
+        transferTimerRef.current = null
+      }
+    }
+  }, [transferHash])
 
+  // Update confirming state only for transfer flow
   useEffect(() => {
-    if (isConfirming) {
+    if (isTransferConfirming) {
+      setTransactionStatus(prev => ({ ...prev, status: 'confirming' }))
+    }
+  }, [isTransferConfirming])
+
+  // Approval success watcher
+  useEffect(() => {
+    if (isApprovalSuccess) {
+      console.log('✅ Approval transaction confirmed, updating status...')
+      setApprovalStatus('success')
+      setIsApprovalComplete(true)
+      if (config.tokenType === 'ERC20') {
+        console.log('🔄 Refetching allowance after approval...')
+        refetchAllowance()
+        
+        // Additional refresh after a short delay to ensure the allowance is updated
+        setTimeout(() => {
+          console.log('🔄 Second allowance refresh...')
+          refetchAllowance()
+        }, 2000)
+        
+        // Force a third refresh after a longer delay
+        setTimeout(() => {
+          console.log('🔄 Third allowance refresh...')
+          refetchAllowance()
+        }, 5000)
+      }
+    }
+  }, [isApprovalSuccess, config.tokenType, refetchAllowance])
+
+  // Fallback: if allowance becomes sufficient while pending, mark approval as success
+  useEffect(() => {
+    if (approvalStatus === 'pending' && isApprovalTransaction && isApproved) {
+      setApprovalStatus('success')
+      setIsApprovalComplete(true)
+    }
+  }, [approvalStatus, isApprovalTransaction, isApproved])
+
+  // Force allowance refresh when approval hash is set
+  useEffect(() => {
+    if (approvalHash && config.tokenType === 'ERC20') {
+      console.log('🔄 Approval hash received, refreshing allowance...')
+      refetchAllowance()
+      
+      // Also set approval as complete immediately when hash is received
+      // This provides immediate UI feedback while the allowance refreshes
+      setTimeout(() => {
+        console.log('✅ Setting approval as complete based on hash...')
+        setIsApprovalComplete(true)
+        setApprovalStatus('success')
+      }, 1000)
+    }
+  }, [approvalHash, config.tokenType, refetchAllowance])
+
+  // Transfer success watcher
+  useEffect(() => {
+    if (isTransferSuccess) {
+      setTransactionStatus(prev => ({ ...prev, status: 'success' }))
+      setShowSuccessModal(true)
+      // Clear approval status when transfer is successful
+      if (approvalStatus === 'success') {
+        console.log('🧹 Clearing approval status after successful transfer...')
+        setApprovalStatus('idle')
+      }
+      if (transferTimerRef.current) {
+        clearTimeout(transferTimerRef.current)
+        transferTimerRef.current = null
+      }
+    }
+  }, [isTransferSuccess, approvalStatus])
+
+  // Error watchers
+  useEffect(() => {
+    if (isApprovalError) {
+      setApprovalStatus('error')
+      setIsApprovalTransaction(false)
+    }
+  }, [isApprovalError])
+  useEffect(() => {
+    if (isTransferError) {
       setTransactionStatus(prev => ({
         ...prev,
-        status: 'confirming'
+        status: 'error',
+        error: prev.error || 'Transaction failed',
       }))
-    }
-  }, [isConfirming])
-
-  useEffect(() => {
-    if (isSuccess) {
-      if (isApprovalTransaction) {
-        // This is an approval transaction
-        setApprovalStatus('success')
-        setIsApprovalComplete(true)
-        setIsApprovalTransaction(false)
-        
-        if (config.tokenType === 'ERC20') {
-          refetchAllowance()
-        }
-      } else {
-        // This is a transfer transaction
-        setTransactionStatus(prev => ({
-          ...prev,
-          status: 'success'
-        }))
-        setShowSuccessModal(true)
+      if (transferTimerRef.current) {
+        clearTimeout(transferTimerRef.current)
+        transferTimerRef.current = null
       }
     }
-  }, [isSuccess, isApprovalTransaction, config.tokenType, refetchAllowance])
+  }, [isTransferError])
 
-  useEffect(() => {
-    if (isError || error) {
-      const errorMessage = error?.message || 'Transaction failed'
-      
-      if (isApprovalTransaction) {
-        // This is an approval transaction error
-        setApprovalStatus('error')
-        setIsApprovalTransaction(false)
-      } else {
-        // This is a transfer transaction error
-        setTransactionStatus(prev => ({
-          ...prev,
-          status: 'error',
-          error: errorMessage.includes('User rejected') || errorMessage.includes('User denied') 
-            ? 'Transaction was cancelled by user' 
-            : errorMessage
-        }))
-      }
-    }
-  }, [isError, error, isApprovalTransaction])
+  // Note: We now use writeContractAsync which returns the hash directly, so we don't need these useEffects
 
   const handleApprove = useCallback(async () => {
-    if (!address || !config.tokenAddress || !contractAddress) return
+    if (!address || !config.tokenAddress || !contractAddress) {
+      console.error('Missing required parameters for approval')
+      return
+    }
 
-    try {
-      setTransactionStatus({ status: 'pending' })
-
-      await writeContract({
-        address: config.tokenAddress as `0x${string}`,
-        abi: [
-          {
-            name: 'approve',
-            type: 'function',
-            stateMutability: 'nonpayable',
-            inputs: [
-              { name: 'spender', type: 'address' },
-              { name: 'amount', type: 'uint256' }
-            ],
-            outputs: [{ name: '', type: 'bool' }]
-          }
-        ],
-        functionName: 'approve',
-        args: [contractAddress, requiredAmount],
-      })
-    } catch (error) {
-      console.error('Approve failed:', error)
-      const errorMessage = error instanceof Error ? error.message : 'Approve failed'
+    // Check if we're connected
+    if (!isConnected) {
       setTransactionStatus({
         status: 'error',
-        error: errorMessage.includes('User rejected') || errorMessage.includes('User denied') 
-          ? 'Transaction was cancelled by user' 
-          : errorMessage
+        error: 'Please connect your wallet first'
       })
+      return
     }
-  }, [address, config.tokenAddress, contractAddress, writeContract, requiredAmount])
+
+    // Do not programmatically switch chains; Farcaster MiniApp may not support it.
+    // Interact directly on Base by specifying chainId in contract calls below.
+
+    try {
+      setApprovalStatus('pending')
+      if (approvalTimerRef.current) {
+        clearTimeout(approvalTimerRef.current)
+        approvalTimerRef.current = null
+      }
+      approvalTimerRef.current = window.setTimeout(() => {
+        // Timeout safety: stop spinner if nothing happens in 30s
+        setApprovalStatus((prev) => (prev === 'pending' ? 'error' : prev))
+        setIsApprovalTransaction(false)
+      }, 30_000)
+
+      // Use a more direct approach to avoid connector issues
+      const approveABI = [
+        {
+          name: 'approve',
+          type: 'function',
+          stateMutability: 'nonpayable',
+          inputs: [
+            { name: 'spender', type: 'address' },
+            { name: 'amount', type: 'uint256' }
+          ],
+          outputs: [{ name: '', type: 'bool' }]
+        }
+      ] as const
+
+      try {
+        setIsApprovalTransaction(true)
+        const txHash = await writeContractApprovalAsync({
+          address: config.tokenAddress as `0x${string}`,
+          abi: approveABI,
+          functionName: 'approve',
+          args: [contractAddress, requiredAmount],
+          chainId: BASE_CHAIN_ID,
+        })
+        console.log('📝 Approval transaction hash received:', txHash)
+        setApprovalHash(txHash as `0x${string}`)
+      } catch (e: any) {
+        const msg = e?.message || String(e)
+        if (msg.includes('getChainId is not a function')) {
+          // Fallback: send via MiniApp provider directly
+          try {
+            const data = encodeFunctionData({
+              abi: approveABI,
+              functionName: 'approve',
+              args: [contractAddress as `0x${string}`, requiredAmount],
+            })
+            const txHash = await MiniAppSDK.wallet.ethProvider.request({
+              method: 'eth_sendTransaction',
+              params: [
+                {
+                  from: address,
+                  to: config.tokenAddress as `0x${string}`,
+                  data,
+                  value: '0x0',
+                },
+              ],
+            })
+            setIsApprovalTransaction(true)
+            setApprovalHash(txHash as `0x${string}`)
+          } catch (fe: any) {
+            // User rejected via MiniApp provider
+            setApprovalStatus('error')
+            setIsApprovalTransaction(false)
+            if (approvalTimerRef.current) {
+              clearTimeout(approvalTimerRef.current)
+              approvalTimerRef.current = null
+            }
+            return
+          }
+        } else {
+          throw e
+        }
+      }
+    } catch (error) {
+      console.error('Approve failed:', error)
+      setApprovalStatus('error')
+      setIsApprovalTransaction(false)
+      const errorMessage = error instanceof Error ? error.message : 'Approve failed'
+      const errorName = (error as any)?.name as string | undefined
+      // If user rejected, do not show transfer error UI
+      if (
+        (typeof errorMessage === 'string' && (
+          errorMessage.includes('User rejected') ||
+          errorMessage.includes('User denied') ||
+          errorMessage.includes('Rejected')
+        )) || errorName === 'RejectedByUser'
+      ) {
+        if (approvalTimerRef.current) {
+          clearTimeout(approvalTimerRef.current)
+          approvalTimerRef.current = null
+        }
+        return
+      }
+      if (approvalTimerRef.current) {
+        clearTimeout(approvalTimerRef.current)
+        approvalTimerRef.current = null
+      }
+      // Keep transactionStatus untouched for approval errors to avoid showing transfer error UI
+    }
+  }, [address, config.tokenAddress, contractAddress, writeContract, requiredAmount, isConnected])
 
   // Handle approval separately
   const handleApproval = useCallback(async () => {
@@ -181,29 +372,75 @@ export function Step5Transaction({ config, onConfigChange, onNext, onPrev }: Ste
       setIsApprovalTransaction(true) // Mark this as approval transaction
       
       // Approve the token
-      await writeContract({
-        address: config.tokenAddress as `0x${string}`,
-        abi: [
-          {
-            name: 'approve',
-            type: 'function',
-            stateMutability: 'nonpayable',
-            inputs: [
-              { name: 'spender', type: 'address' },
-              { name: 'amount', type: 'uint256' }
-            ],
-            outputs: [{ name: '', type: 'bool' }]
+      try {
+        const txHash = await writeContractApprovalAsync({
+          address: config.tokenAddress as `0x${string}`,
+          abi: [
+            {
+              name: 'approve',
+              type: 'function',
+              stateMutability: 'nonpayable',
+              inputs: [
+                { name: 'spender', type: 'address' },
+                { name: 'amount', type: 'uint256' }
+              ],
+              outputs: [{ name: '', type: 'bool' }]
+            }
+          ],
+          functionName: 'approve',
+          args: [contractAddress, requiredAmount],
+          chainId: BASE_CHAIN_ID,
+        })
+        console.log('📝 Approval transaction hash received:', txHash)
+        setApprovalHash(txHash as `0x${string}`)
+      } catch (e: any) {
+        const msg = e?.message || String(e)
+        if (msg.includes('getChainId is not a function')) {
+          try {
+            const data = encodeFunctionData({
+              abi: [
+                {
+                  name: 'approve',
+                  type: 'function',
+                  stateMutability: 'nonpayable',
+                  inputs: [
+                    { name: 'spender', type: 'address' },
+                    { name: 'amount', type: 'uint256' }
+                  ],
+                  outputs: [{ name: '', type: 'bool' }]
+                }
+              ] as const,
+              functionName: 'approve',
+              args: [contractAddress as `0x${string}`, requiredAmount],
+            })
+            const txHash = await MiniAppSDK.wallet.ethProvider.request({
+              method: 'eth_sendTransaction',
+              params: [
+                {
+                  from: address,
+                  to: config.tokenAddress as `0x${string}`,
+                  data,
+                  value: '0x0',
+                },
+              ],
+            })
+            setApprovalHash(txHash as `0x${string}`)
+          } catch (fe: any) {
+            setApprovalStatus('error')
+            setIsApprovalTransaction(false)
+            return
           }
-        ],
-        functionName: 'approve',
-        args: [contractAddress, requiredAmount],
-      })
+        } else {
+          throw e
+        }
+      }
       
     } catch (error) {
       console.error('❌ Approve transaction failed:', error)
       setApprovalStatus('error')
       setIsApprovalTransaction(false)
-      throw error
+      // Do not rethrow to avoid leaving spinner in pending state
+      return
     }
   }, [address, contractAddress, config.tokenAddress, writeContract, requiredAmount])
 
@@ -213,6 +450,21 @@ export function Step5Transaction({ config, onConfigChange, onNext, onPrev }: Ste
       setTransactionStatus({
         status: 'error',
         error: 'Wallet not connected or contract not deployed'
+      })
+      return
+    }
+
+    // Clear approval status when starting transfer
+    if (approvalStatus === 'success') {
+      console.log('🧹 Clearing approval status for transfer...')
+      setApprovalStatus('idle')
+    }
+
+    // Enforce max recipients limit
+    if (!recipientsWithinLimit) {
+      setTransactionStatus({
+        status: 'error',
+        error: `Too many recipients. Max allowed is ${maxRecipients}`,
       })
       return
     }
@@ -228,8 +480,21 @@ export function Step5Transaction({ config, onConfigChange, onNext, onPrev }: Ste
     }
 
     try {
-      setIsApprovalTransaction(false) // Mark this as transfer transaction
-      setTransactionStatus({ status: 'pending' })
+      // Reset approval transaction flag before starting transfer
+      setIsApprovalTransaction(false)
+      // Show signing state while waiting for wallet confirmation
+      setTransactionStatus({ status: 'signing', message: 'Please confirm the transaction in your wallet…' })
+      // Start 30s signing guard
+      if (signingTimerRef.current) {
+        clearTimeout(signingTimerRef.current)
+        signingTimerRef.current = null
+      }
+      signingTimerRef.current = window.setTimeout(() => {
+        setTransactionStatus((prev) => {
+          if (!prev || prev.status !== 'signing') return prev as any
+          return { ...prev, status: 'idle', message: 'Signature taking longer than usual. Please try again.' }
+        })
+      }, 30_000)
 
       const addresses = config.recipients.map(r => r.address as `0x${string}`)
       const amountStrings = config.recipients.map(r => r.amount)
@@ -242,7 +507,6 @@ export function Step5Transaction({ config, onConfigChange, onNext, onPrev }: Ste
         config.tokenDecimals || 18
       )
 
-
       if (config.tokenType === 'ETH') {
         const totalValue = amounts.reduce((a, b) => a + b, BigInt(0))
         const fee = flatFee || BigInt(0)
@@ -250,65 +514,121 @@ export function Step5Transaction({ config, onConfigChange, onNext, onPrev }: Ste
         
   
         
-        await writeContract({
-          address: contractAddress as `0x${string}`,
-          abi: SAFE_MULTISENDER_ABI,
-          functionName: 'multiSendETH',
-          args: [addresses, amounts, config.revertOnFail],
-          value: totalWithFee,
-        })
+        try {
+          console.log('🚀 Sending ETH transaction...', { contractAddress, totalWithFee: totalWithFee.toString() })
+          const txHash = await writeContractAsync({
+            address: contractAddress as `0x${string}`,
+            abi: SAFE_MULTISENDER_ABI,
+            functionName: 'multiSendETH',
+            args: [addresses, amounts],
+            value: totalWithFee,
+            chainId: BASE_CHAIN_ID,
+          })
+          console.log('📝 Transaction hash received:', txHash)
+          setTransferHash(txHash as `0x${string}`)
+        } catch (e: any) {
+          const msg = e?.message || String(e)
+          const tryFallback = /getChainId is not a function|Connector|Not connected|getAccounts|Provider/i.test(msg)
+          if (tryFallback) {
+            const data = encodeFunctionData({
+              abi: SAFE_MULTISENDER_ABI,
+              functionName: 'multiSendETH',
+              args: [addresses, amounts],
+            })
+            console.log('🔄 Using fallback transaction method for ETH...')
+            const txHash = await MiniAppSDK.wallet.ethProvider.request({
+              method: 'eth_sendTransaction',
+              params: [
+                {
+                  from: address,
+                  to: contractAddress,
+                  data,
+                  value: toHex(totalWithFee),
+                },
+              ],
+            })
+            console.log('📝 Fallback transaction hash received:', txHash)
+            setTransferHash(txHash as `0x${string}`)
+          } else {
+            throw e
+          }
+        }
       } else {
         const fee = flatFee || BigInt(0)
         
 
         
-        await writeContract({
-          address: contractAddress as `0x${string}`,
-          abi: SAFE_MULTISENDER_ABI,
-          functionName: 'multiSendERC20',
-          args: [config.tokenAddress as `0x${string}`, addresses, amounts],
-          value: fee,
-        })
+        try {
+          console.log('🚀 Sending ERC20 transaction...', { contractAddress, tokenAddress: config.tokenAddress, fee: fee.toString() })
+          const txHash = await writeContractAsync({
+            address: contractAddress as `0x${string}`,
+            abi: SAFE_MULTISENDER_ABI,
+            functionName: 'multiSendERC20',
+            args: [config.tokenAddress as `0x${string}`, addresses, amounts],
+            value: fee,
+            chainId: BASE_CHAIN_ID,
+          })
+          console.log('📝 Transaction hash received:', txHash)
+          setTransferHash(txHash as `0x${string}`)
+        } catch (e: any) {
+          const msg = e?.message || String(e)
+          const tryFallback = /getChainId is not a function|Connector|Not connected|getAccounts|Provider/i.test(msg)
+          if (tryFallback) {
+            const data = encodeFunctionData({
+              abi: SAFE_MULTISENDER_ABI,
+              functionName: 'multiSendERC20',
+              args: [config.tokenAddress as `0x${string}`, addresses, amounts],
+            })
+            console.log('🔄 Using fallback transaction method for ERC20...')
+            const txHash = await MiniAppSDK.wallet.ethProvider.request({
+              method: 'eth_sendTransaction',
+              params: [
+                {
+                  from: address,
+                  to: contractAddress,
+                  data,
+                  value: toHex(fee),
+                },
+              ],
+            })
+            console.log('📝 Fallback transaction hash received:', txHash)
+            setTransferHash(txHash as `0x${string}`)
+          } else {
+            throw e
+          }
+        }
       }
-      
-      console.log('✅ Transfer transaction sent successfully!')
+      console.log('✅ Transfer transaction submitted successfully!')
     } catch (error) {
       console.error('Transaction failed:', error)
-      const errorMessage = error instanceof Error ? error.message : 'Transaction failed'
-      setTransactionStatus({
-        status: 'error',
-        error: errorMessage.includes('User rejected') || errorMessage.includes('User denied') 
-          ? 'Transaction was cancelled by user' 
-          : errorMessage
-      })
+      const err: any = error
+      const errorName = err?.name as string | undefined
+      const errorCode = err?.code as number | undefined
+      const errorMessage = (err?.message as string | undefined) || 'Transaction failed'
+      if (transferTimerRef.current) {
+        clearTimeout(transferTimerRef.current)
+        transferTimerRef.current = null
+      }
+      if (
+        errorName === 'RejectedByUser' ||
+        errorCode === 4001 ||
+        /User rejected|User denied|Rejected/i.test(errorMessage)
+      ) {
+        setTransactionStatus({ status: 'error', error: 'Transaction was cancelled by user' })
+        return
+      }
+      setTransactionStatus({ status: 'error', error: errorMessage })
     }
-  }, [address, contractAddress, config, writeContract, flatFee, isApproved, requiredAmount, refetchAllowance, allowance])
+  }, [address, contractAddress, config, writeContract, flatFee, isApproved, requiredAmount, refetchAllowance, allowance, approvalStatus])
 
-  // Log component state for debugging
-  useEffect(() => {
-    console.log('🔍 Step5Transaction useEffect:', {
-      status: transactionStatus.status,
-      address: !!address,
-      contractAddress: !!contractAddress,
-      config: {
-        tokenType: config.tokenType,
-        tokenAddress: config.tokenAddress,
-        recipients: config.recipients.length
-      },
-      allowance: allowance?.toString(),
-      isApproved: isApproved,
-      requiredAmount: requiredAmount?.toString()
-    })
-    
-    // Force log to appear
-    console.warn('⚠️ DEBUG: Step5Transaction mounted/updated')
-    console.error('❌ DEBUG: This is a test error log')
-  }, [address, contractAddress, transactionStatus.status, config, allowance, isApproved, requiredAmount])
+  // (Debug logging removed to reduce noise in Step 5 UI)
 
   const handleNewTransaction = () => {
     // Reset all statuses
     setTransactionStatus({ status: 'idle' })
     setApprovalStatus('idle')
+    setIsApprovalTransaction(false)
+    setIsApprovalComplete(false)
     setShowSuccessModal(false)
     
     // Reset to step 1
@@ -316,7 +636,6 @@ export function Step5Transaction({ config, onConfigChange, onNext, onPrev }: Ste
       tokenType: 'ETH',
       recipients: [],
       amountMode: 'fixed',
-      revertOnFail: true,
       tokenAddress: undefined,
       tokenSymbol: undefined,
       tokenDecimals: undefined,
@@ -334,18 +653,20 @@ export function Step5Transaction({ config, onConfigChange, onNext, onPrev }: Ste
 
   const getStatusMessage = () => {
     switch (transactionStatus.status) {
+      case 'signing':
+        return transactionStatus.message || 'Waiting for wallet signature…'
       case 'idle':
         return 'Transaction sent, waiting for confirmation...'
       case 'pending':
-        return 'Transaction sent, waiting for confirmation...'
+        return transactionStatus.message || 'Transaction sent, waiting for confirmation...'
       case 'confirming':
         return 'Transaction confirming...'
       case 'success':
         return 'Transaction successfully completed!'
       case 'error':
-        return 'Transaction failed'
+        return transactionStatus.error || 'Transaction failed'
       default:
-        return ''
+        return 'Processing...'
     }
   }
 
@@ -363,8 +684,8 @@ export function Step5Transaction({ config, onConfigChange, onNext, onPrev }: Ste
   }
 
   const getExplorerUrlForHash = () => {
-    if (!hash || !chain) return ''
-    return getExplorerUrl(chain.id, hash)
+    if (!transactionStatus.hash) return ''
+    return getExplorerUrl(BASE_CHAIN_ID, transactionStatus.hash)
   }
 
   return (
@@ -382,6 +703,11 @@ export function Step5Transaction({ config, onConfigChange, onNext, onPrev }: Ste
               <span className="text-gray-600 dark:text-gray-400">Recipients:</span>
               <span className="text-black dark:text-white">{config.recipients.length}</span>
             </div>
+            {!recipientsWithinLimit && (
+              <div className="p-2 bg-yellow-50 dark:bg-yellow-900 border border-yellow-200 dark:border-yellow-700 rounded">
+                <p className="text-xs text-yellow-800 dark:text-yellow-200">Too many recipients. Max allowed is {maxRecipients}.</p>
+              </div>
+            )}
             <div className="flex justify-between">
               <span className="text-gray-600 dark:text-gray-400">Total Amount:</span>
               <span className="text-black dark:text-white font-medium">
@@ -398,7 +724,7 @@ export function Step5Transaction({ config, onConfigChange, onNext, onPrev }: Ste
             )}
             <div className="flex justify-between">
               <span className="text-gray-600 dark:text-gray-400">Network:</span>
-              <span className="text-black dark:text-white">{chain ? getChainName(chain.id) : 'Unknown'}</span>
+              <span className="text-black dark:text-white">{getChainName(BASE_CHAIN_ID)}</span>
             </div>
           </div>
         </div>
@@ -418,43 +744,33 @@ export function Step5Transaction({ config, onConfigChange, onNext, onPrev }: Ste
           )}
           
           {contractAddress && transactionStatus.status === 'idle' && (
-            <div className="space-y-3">
+            <div className="space-y-3 my-2">
               {config.tokenType === 'ERC20' && (
-                <div className="p-3 bg-[#5638a1] dark:bg-[#5638a1] border border-[#5638a1] dark:border-[#5638a1] rounded-lg">
-                  <p className="text-[#5638a1] dark:text-[#5638a1] font-medium text-xs mb-2">
+                <div className="p-3 border border-gray-200 dark:border-gray-800 rounded-lg">
+                  <p className="text-gray-600 dark:text-gray-400 font-medium text-xs mb-2">
                     Token Allowance Status
                   </p>
                   <div className="space-y-2 text-xs">
                     <div className="flex justify-between">
-                      <span className="text-[#5638a1] dark:text-[#5638a1]">Current Allowance:</span>
-                      <span className="text-[#5638a1] dark:text-[#5638a1] font-mono">
-                        {allowance ? formatAmount(allowance.toString(), 4, config.tokenSymbol) : '0'} {config.tokenSymbol}
+                      <span className="text-gray-600 dark:text-gray-400">Current Allowance:</span>
+                      <span className="text-gray-600 dark:text-gray-400 font-mono">
+                        {allowance ? formatAmount(formatUnits(BigInt(allowance.toString()), config.tokenDecimals || 18), 4, config.tokenSymbol) : '0'} {config.tokenSymbol}
                       </span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-[#5638a1] dark:text-[#5638a1]">Required Amount:</span>
-                      <span className="text-[#5638a1] dark:text-[#5638a1] font-mono">
-                        {formatAmount(requiredAmount.toString(), 4, config.tokenSymbol)} {config.tokenSymbol}
+                      <span className="text-gray-600 dark:text-gray-400">Required Amount:</span>
+                      <span className="text-gray-600 dark:text-gray-400 font-mono">
+                        {formatAmount(formatUnits(BigInt(requiredAmount.toString()), config.tokenDecimals || 18), 4, config.tokenSymbol)} {config.tokenSymbol}
                       </span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-[#5638a1] dark:text-[#5638a1]">Status:</span>
+                      <span className="text-gray-600 dark:text-gray-400">Status:</span>
                       <span className={`font-medium ${isApproved ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                         {isApproved ? '✓ Approved' : '✗ Needs Approval'}
                       </span>
                     </div>
                   </div>
-                  
-                  {!isApproved && (
-                    <div className="mt-3 p-2 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 rounded">
-                      <p className="text-yellow-800 dark:text-yellow-200 text-xs mb-2">
-                        ⚠️ Token approval required before sending
-                      </p>
-                      <p className="text-yellow-700 dark:text-yellow-300 text-xs">
-                        Click &quot;Send Transaction&quot; to approve and send automatically
-                      </p>
-                    </div>
-                  )}
+               
                 </div>
               )}
               
@@ -465,6 +781,14 @@ export function Step5Transaction({ config, onConfigChange, onNext, onPrev }: Ste
             <div className="space-y-3">
               <div className="w-12 h-12 border-4 border-gray-300 dark:border-gray-800 border-t-[#5638a1] rounded-full animate-spin mx-auto"></div>
               <p className="text-[#5638a1] dark:text-[#5638a1] text-xs">Approving token...</p>
+            </div>
+          )}
+
+          {approvalStatus === 'error' && (
+            <div className="space-y-3">
+              <div className="p-2 bg-red-50 dark:bg-red-900 border border-red-200 dark:border-red-700 rounded-lg">
+                <p className="text-xs text-red-800 dark:text-red-200">Approval failed or cancelled. Please try again.</p>
+              </div>
             </div>
           )}
 
@@ -484,20 +808,33 @@ export function Step5Transaction({ config, onConfigChange, onNext, onPrev }: Ste
             </div>
           )}
 
-          {(transactionStatus.status === 'pending' || transactionStatus.status === 'confirming') && (
+          {(transactionStatus.status === 'signing' || transactionStatus.status === 'pending' || transactionStatus.status === 'confirming') && (
             <div className="space-y-3">
               <div className="w-12 h-12 border-4 border-gray-300 dark:border-gray-800 border-t-black dark:border-t-white rounded-full animate-spin mx-auto"></div>
               <p className={`${getStatusColor()} text-xs`}>{getStatusMessage()}</p>
               {transactionStatus.hash && (
                 <div className="p-2 bg-gray-50 dark:bg-black/20 dark:backdrop-blur-sm rounded-lg">
                   <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">Transaction Hash:</p>
-                  <p className="font-mono text-xs text-black dark:text-white break-all">
-                    {transactionStatus.hash}
-                  </p>
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="font-mono text-xs text-black dark:text-white break-all">
+                      {transactionStatus.hash}
+                    </p>
+                    {getExplorerUrlForHash() && (
+                      <a
+                        href={getExplorerUrlForHash()}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-blue-600 dark:text-blue-400 underline"
+                      >
+                        View on explorer
+                      </a>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
           )}
+
 
           {transactionStatus.status === 'success' && (
             <div className="space-y-3">
@@ -566,17 +903,18 @@ export function Step5Transaction({ config, onConfigChange, onNext, onPrev }: Ste
                   onClick={handleApproval}
                   className="px-6"
                   size="sm"
-                  disabled={approvalStatus === 'pending'}
+                  disabled={approvalStatus === 'pending' || !recipientsWithinLimit}
                 >
-                  {approvalStatus === 'pending' ? 'Approving...' : 'Approve Token'}
+                  {approvalStatus === 'pending' ? 'Approving...' : !recipientsWithinLimit ? 'Fix Recipient Count' : 'Approve Token'}
                 </Button>
               ) : (
                 <Button
                   onClick={handleSendTransaction}
                   className="px-6"
                   size="sm"
+                  disabled={!recipientsWithinLimit}
                 >
-                  Send Transaction
+                  {recipientsWithinLimit ? 'Send Transaction' : 'Fix Recipient Count'}
                 </Button>
               )}
             </>
@@ -585,7 +923,7 @@ export function Step5Transaction({ config, onConfigChange, onNext, onPrev }: Ste
           {transactionStatus.status === 'success' && (
             <Button
               onClick={handleNewTransaction}
-              className="px-6"
+              className="px-6 w-full"
               size="sm"
             >
               New Transaction

@@ -1,7 +1,9 @@
 import { useReadContract } from 'wagmi'
+import { useChainId } from 'wagmi'
 import { SAFE_MULTISENDER_ABI, getContractAddress } from '@/lib/contracts'
 
-export function useContractInfo(chainId: number) {
+export function useContractInfo() {
+  const chainId = useChainId()
   const contractAddress = getContractAddress(chainId)
   
   const { data: flatFee, error: flatFeeError } = useReadContract({
@@ -40,5 +42,6 @@ export function useContractInfo(chainId: number) {
     feeRecipient: feeRecipient as string | undefined,
     maxEthRecipients: maxEthRecipients as number | undefined,
     maxErc20Recipients: maxErc20Recipients as number | undefined,
+    contractAddress,
   }
 }

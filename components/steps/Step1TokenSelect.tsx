@@ -50,10 +50,12 @@ export function Step1TokenSelect({ config, onConfigChange, onNext }: StepProps) 
     setTokenError('')
     
     // Update config
+    const isNative = token.contractAddress === '0x0000000000000000000000000000000000000000'
     onConfigChange({
       ...config,
-      tokenType: token.contractAddress === '0x0000000000000000000000000000000000000000' ? 'ETH' : 'ERC20',
-      tokenAddress: token.contractAddress === '0x0000000000000000000000000000000000000000' ? undefined : token.contractAddress,
+      tokenType: isNative ? 'ETH' : 'ERC20',
+      // Set zero address for native tokens as a stable placeholder
+      tokenAddress: isNative ? '0x0000000000000000000000000000000000000000' : token.contractAddress,
       tokenSymbol: token.symbol,
       tokenName: token.name,
       tokenDecimals: token.decimals
@@ -119,12 +121,12 @@ export function Step1TokenSelect({ config, onConfigChange, onNext }: StepProps) 
       <div className="space-y-3">
 
         {/* Tab Navigation */}
-        <div className="flex space-x-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
+        <div className="flex space-x-1 bg-gray-100 dark:bg-transparent border border-gray-200 dark:border-gray-800 rounded-lg p-1">
           <button
             onClick={() => setActiveTab('tokens')}
-            className={`flex-1 py-2 px-3 text-sm font-medium rounded-md transition-colors ${
+            className={`flex-1 py-2 px-2 text-sm font-medium rounded-md transition-colors ${
               activeTab === 'tokens'
-                ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+                ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-sm'
                 : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
             }`}
           >
@@ -137,9 +139,9 @@ export function Step1TokenSelect({ config, onConfigChange, onNext }: StepProps) 
           </button>
           <button
             onClick={() => setActiveTab('manual')}
-            className={`flex-1 py-2 px-3 text-sm font-medium rounded-md transition-colors ${
+            className={`flex-1 py-2 px-2 text-sm font-medium rounded-md transition-colors ${
               activeTab === 'manual'
-                ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+                ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-sm'
                 : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
             }`}
           >
@@ -191,17 +193,8 @@ export function Step1TokenSelect({ config, onConfigChange, onNext }: StepProps) 
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center space-x-2">
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center overflow-hidden ${
-                          selectedToken?.contractAddress === token.contractAddress
-                            ? 'bg-[#5638a1] dark:bg-[#5638a1]'
-                            : 'bg-gray-100 dark:bg-black/30 dark:backdrop-blur-sm'
-                        }`}>
-                          {token.contractAddress === '0x0000000000000000000000000000000000000000' ? (
-                            // Native token icon
-                            <div className="w-full h-full bg-gradient-to-br from-[#5638a1] to-purple-600 flex items-center justify-center">
-                              <span className="text-xs font-bold text-white">₿</span>
-                            </div>
-                          ) : token.logo ? (
+                        <div className="w-8 h-8 rounded-full flex items-center justify-center overflow-hidden bg-gray-100 dark:bg-black/30 dark:backdrop-blur-sm">
+                          {token.logo ? (
                             <Image 
                               src={token.logo} 
                               alt={token.symbol}
@@ -281,7 +274,7 @@ export function Step1TokenSelect({ config, onConfigChange, onNext }: StepProps) 
                       </svg>
                     </Button>
                     
-                    <div className="flex items-center space-x-1">
+                    <div className="flex items-center space-x-1 shadow-sm p-0.5 rounded-lg">
                       {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
                         const pageNum = Math.max(1, Math.min(totalPages - 4, currentPage - 2)) + i
                         if (pageNum > totalPages) return null

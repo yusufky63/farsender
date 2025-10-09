@@ -42,3 +42,41 @@ export function formatFee(fee: bigint): string {
   const feeInEth = Number(fee) / 1e18
   return `${feeInEth.toFixed(6)} ETH`
 }
+
+// Contract Statistics Interface
+export interface ContractStats {
+  uniqueUsers: bigint;
+  totalTransfers: bigint;
+  totalRecipients: bigint;
+  totalEthSent: bigint;
+  totalTokenSent: Record<string, bigint>;
+}
+
+// Helper function to get contract statistics
+export async function getContractStats(contract: any): Promise<ContractStats> {
+  try {
+    const [uniqueUsers, totalTransfers, totalRecipients, totalEthSent] = await Promise.all([
+      contract.read.uniqueUsers(),
+      contract.read.totalTransfers(),
+      contract.read.totalRecipients(),
+      contract.read.totalEthSent()
+    ]);
+    
+    return {
+      uniqueUsers: uniqueUsers || BigInt(0),
+      totalTransfers: totalTransfers || BigInt(0),
+      totalRecipients: totalRecipients || BigInt(0),
+      totalEthSent: totalEthSent || BigInt(0),
+      totalTokenSent: {} // Token stats will be fetched separately if needed
+    };
+  } catch (error) {
+    console.error('Error fetching contract stats:', error);
+    return {
+      uniqueUsers: BigInt(0),
+      totalTransfers: BigInt(0),
+      totalRecipients: BigInt(0),
+      totalEthSent: BigInt(0),
+      totalTokenSent: {}
+    };
+  }
+}

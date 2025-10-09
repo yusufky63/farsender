@@ -10,14 +10,11 @@ export function EnforceBaseChain() {
   useEffect(() => {
     if (!isConnected) return
     if (chain?.id !== base.id) {
-      try {
-        switchChain({ chainId: base.id })
-      } catch (e) {
-        // silent; some wallets may not support programmatic switching without prompt
-      }
+      // Some connectors (e.g., Farcaster MiniApp) may not support programmatic
+      // chain switching or may not expose chain details. Avoid throwing here.
+      Promise.resolve(switchChain({ chainId: base.id })).catch(() => {})
     }
   }, [isConnected, chain?.id, switchChain])
 
   return null
 }
-

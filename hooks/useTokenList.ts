@@ -52,9 +52,16 @@ export function useTokenList() {
         const dune = new DuneAPI(duneApiKey)
         const tokens = await dune.getAllTokens(address, chain.id)
         
+        // Process tokens to handle native token contract addresses
+        const processedTokens = tokens.map(token => ({
+          ...token,
+          // Convert "native" contract address to zero address for ETH
+          contractAddress: token.contractAddress === 'native' ? '0x0000000000000000000000000000000000000000' : token.contractAddress
+        }))
+        
         const data: TokenListResponse = {
-          tokens,
-          totalCount: tokens.length,
+          tokens: processedTokens,
+          totalCount: processedTokens.length,
           hasMore: false
         }
         

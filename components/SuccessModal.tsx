@@ -73,7 +73,7 @@ export function SuccessModal({
 
   return createPortal(
     <div 
-      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999] p-4"
+      className="fixed inset-0 dark:backdrop-blur-none   backdrop-blur-sm flex items-center justify-center z-[9999] p-2"
       onClick={(e) => {
         if (e.target === e.currentTarget) {
           onClose()
@@ -81,7 +81,7 @@ export function SuccessModal({
       }}
     >
       <div 
-        className="bg-white dark:bg-gray-900 rounded-lg max-w-md w-full max-h-[80vh] overflow-y-auto border border-gray-200 dark:border-gray-700"
+        className="dark:bg-transparent bg-white backdrop-blur-xl rounded-lg max-w-md w-full max-h-[80vh] overflow-y-auto border dark:border-gray-800 border-gray-200"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -112,7 +112,7 @@ export function SuccessModal({
         {/* Content */}
         <div className="p-4 space-y-3">
           {/* Transaction Summary */}
-          <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
+          <div className="dark:bg-transparent bg-white backdrop-blur-sm rounded-lg p-3 border border-gray-200 dark:border-gray-800">
             <h4 className="text-xs font-medium text-black dark:text-white mb-2">Transaction Summary</h4>
             <div className="space-y-1 text-xs">
               <div className="flex justify-between">
@@ -132,18 +132,18 @@ export function SuccessModal({
               <div className="flex justify-between">
                 <span className="text-gray-600 dark:text-gray-400">From:</span>
                 <span className="text-black dark:text-white font-mono text-xs">
-                  {address?.slice(0, 6)}...{address?.slice(-4)}
+                  {address?.slice(0, 4)}...{address?.slice(-4)}
                 </span>
               </div>
             </div>
           </div>
 
           {/* Transaction Hash */}
-          <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
+          <div className="dark:bg-transparent bg-white backdrop-blur-sm rounded-lg p-3 border border-gray-200 dark:border-gray-800">
             <h4 className="text-xs font-medium text-black dark:text-white mb-2">Transaction Hash</h4>
             <div className="flex items-center space-x-2">
               <p className="font-mono text-xs text-black dark:text-white break-all flex-1">
-                {transactionHash}
+                {transactionHash.slice(0, 6)}...{transactionHash.slice(-4)}
               </p>
               {explorerUrl && (
                 <a
@@ -158,29 +158,6 @@ export function SuccessModal({
             </div>
           </div>
 
-          {/* Recipients Preview */}
-          <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
-            <h4 className="text-xs font-medium text-black dark:text-white mb-2">
-              Recipients ({recipients.length})
-            </h4>
-            <div className="space-y-1 max-h-32 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600 scrollbar-track-transparent">
-              {recipients.slice(0, 3).map((recipient, index) => (
-                <div key={index} className="flex justify-between items-center text-xs">
-                  <span className="font-mono text-black dark:text-white">
-                    {recipient.address.slice(0, 6)}...{recipient.address.slice(-4)}
-                  </span>
-                  <span className="text-gray-600 dark:text-gray-400">
-                    {formatAmount(recipient.amount, 4, tokenSymbol)} {tokenSymbol}
-                  </span>
-                </div>
-              ))}
-              {recipients.length > 3 && (
-                <div className="text-center text-xs text-gray-500 dark:text-gray-400 py-1 border-t border-gray-200 dark:border-gray-600 mt-1 pt-1">
-                  ... and {recipients.length - 3} more recipients
-                </div>
-              )}
-            </div>
-          </div>
         </div>
 
         {/* Actions */}

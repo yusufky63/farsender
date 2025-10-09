@@ -23,7 +23,7 @@ export const metadata: Metadata = {
       version: miniapp.version,
       imageUrl: miniapp.heroImageUrl,
       button: {
-        title: `Open ${miniapp.name}`,
+        title: `Send Tokens`,
         action: {
           type: "launch_frame",
           name: miniapp.name,

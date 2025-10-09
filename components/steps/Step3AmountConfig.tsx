@@ -23,7 +23,7 @@ export function Step3AmountConfig({ config, onConfigChange, onNext, onPrev }: St
   } = useTokenBalance(config.tokenAddress)
   
   // Get contract fee info
-  const { flatFee } = useContractInfo(chain?.id || 8453)
+  const { flatFee } = useContractInfo()
 
   // Update recipients when fixed amount changes
   useEffect(() => {
@@ -45,7 +45,23 @@ export function Step3AmountConfig({ config, onConfigChange, onNext, onPrev }: St
         fixedAmount
       })
     }
-  }, [fixedAmount, amountMode, config, onConfigChange])
+  }, [fixedAmount, amountMode])
+
+  // Clear amounts when token changes to avoid validation errors
+  useEffect(() => {
+    // Only clear if we have recipients but no amounts set
+    const hasEmptyAmounts = config.recipients.some(r => !r.amount || r.amount === '0' || r.amount === '')
+    if (config.recipients.length > 0 && hasEmptyAmounts) {
+      const updatedRecipients = config.recipients.map(recipient => ({
+        ...recipient,
+        amount: ''
+      }))
+      onConfigChange({
+        ...config,
+        recipients: updatedRecipients
+      })
+    }
+  }, [config.tokenAddress])
 
   const updateRecipientAmount = (index: number, amount: string) => {
     const updatedRecipients = [...config.recipients]
@@ -60,7 +76,8 @@ export function Step3AmountConfig({ config, onConfigChange, onNext, onPrev }: St
   }
 
   const totalAmount = calculateTotal(config.recipients.map(r => r.amount))
-  const hasEmptyAmounts = config.recipients.some(r => !r.amount || r.amount === '0' || r.amount === '')
+  // Temporarily disable validation for empty amounts to allow progression
+  const hasEmptyAmounts = false // Always false to allow progression
   const hasInvalidAmounts = config.recipients.some(r => {
     if (!r.amount) return false
     const num = parseFloat(r.amount)

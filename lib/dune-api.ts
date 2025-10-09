@@ -1,6 +1,8 @@
 // Dune API integration for token balances, prices, and metadata
 import { getChainInfo } from '@/lib/chains'
 
+const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000'
+
 export interface DuneTokenBalance {
   address: string
   amount: string
@@ -149,6 +151,7 @@ export class DuneAPI {
           // Check if this is a native token (ETH, etc.)
           const isNativeToken = token.address === '0x0000000000000000000000000000000000000000' || 
                                token.address === '0x0' ||
+                               token.address === 'native' ||
                                token.symbol === 'ETH' ||
                                token.name === 'Ethereum'
           
@@ -184,17 +187,25 @@ export class DuneAPI {
     try {
       const tokens = await this.getTokenBalances(address, chainId)
       
-      return tokens.map(token => ({
-        contractAddress: token.address,
-        name: token.name,
-        symbol: token.symbol,
-        decimals: token.decimals,
-        balance: token.amount,
-        balanceFormatted: this.formatTokenBalance(token.amount, token.decimals),
-        logo: token.token_metadata?.logo,
-        price: token.price_usd,
-        value_usd: token.value_usd
-      }))
+      return tokens.map(token => {
+        const isNative =
+          token.address === 'native' ||
+          token.address === '0x0' ||
+          token.address === ZERO_ADDRESS ||
+          token.symbol === 'ETH'
+
+        return {
+          contractAddress: isNative ? ZERO_ADDRESS : token.address,
+          name: token.name,
+          symbol: token.symbol,
+          decimals: token.decimals,
+          balance: token.amount,
+          balanceFormatted: this.formatTokenBalance(token.amount, token.decimals),
+          logo: token.token_metadata?.logo,
+          price: token.price_usd,
+          value_usd: token.value_usd,
+        }
+      })
     } catch (error) {
       console.error('Failed to get all tokens from Dune:', error)
       throw error
@@ -231,17 +242,21 @@ export class DuneAPI {
       const data: DuneBalancesResponse = await response.json()
       
       // Find the specific token
-      const token = data.balances.find(t => 
-        t.address.toLowerCase() === tokenAddress.toLowerCase()
-      )
+      const token = data.balances.find(t => {
+        // Handle native token case
+        if (tokenAddress === '0x0000000000000000000000000000000000000000' && t.address === 'native') {
+          return true
+        }
+        return t.address.toLowerCase() === tokenAddress.toLowerCase()
+      })
 
       if (!token) {
         return null
       }
 
       return {
-        address: token.address,
-        contractAddress: token.address,
+        address: token.address === 'native' ? '0x0000000000000000000000000000000000000000' : token.address,
+        contractAddress: token.address === 'native' ? '0x0000000000000000000000000000000000000000' : token.address,
         name: token.name,
         symbol: token.symbol,
         decimals: token.decimals,

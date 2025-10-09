@@ -13,15 +13,15 @@ export interface MultisenderConfig {
   recipients: Recipient[]
   amountMode: 'fixed' | 'variable'
   fixedAmount?: string
-  revertOnFail: boolean
   flatFee?: bigint
   feeRecipient?: string
 }
 
 export interface TransactionStatus {
   hash?: string
-  status: 'idle' | 'pending' | 'confirming' | 'success' | 'error'
+  status: 'idle' | 'signing' | 'pending' | 'confirming' | 'success' | 'error'
   error?: string
+  message?: string
 }
 
 export interface FarcasterUser {

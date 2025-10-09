@@ -8,6 +8,7 @@ import { calculateTotal, formatAmount, formatAddress, validateTotalBalance } fro
 import { parseAmounts, getContractAddress } from '@/lib/contracts'
 import { getChainName } from '@/lib/chains'
 import { useTokenBalance } from '@/hooks/useTokenBalance'
+import { useContractInfo } from '@/hooks/useContractInfo'
 
 const ERC20_ABI = [
   {
@@ -33,7 +34,6 @@ export function Step4Review({ config, onConfigChange, onNext, onPrev }: StepProp
 
   
   const { address, chain } = useAccount()
-  const [revertOnFail, setRevertOnFail] = useState(config.revertOnFail)
   const [needsApproval, setNeedsApproval] = useState(false)
   const [isCheckingApproval, setIsCheckingApproval] = useState(false)
   
@@ -49,6 +49,7 @@ export function Step4Review({ config, onConfigChange, onNext, onPrev }: StepProp
 
   const totalAmount = calculateTotal(config.recipients.map(r => r.amount))
   const contractAddress = chain ? getContractAddress(chain.id) : ''
+  const { flatFee } = useContractInfo()
 
   // Check ERC20 allowance
   const { data: allowance } = useReadContract({
@@ -72,30 +73,39 @@ export function Step4Review({ config, onConfigChange, onNext, onPrev }: StepProp
     }
   })
 
-  const handleRevertOnFailChange = (value: boolean) => {
-    setRevertOnFail(value)
-    onConfigChange({
-      ...config,
-      revertOnFail: value
-    })
-  }
 
   const handleSend = () => {
     onNext()
   }
 
-  // Simplified canSend - just check if we have balance for ERC20, allowance will be handled in Step5
-  const canSend = config.tokenType === 'ETH' || 
-    (config.tokenType === 'ERC20' && balance && 
-     balance >= parseAmounts([totalAmount.toString()], false, config.tokenDecimals || 18)[0])
+  // Compute required amounts for both flows
+  const requiredTokenAmount = parseAmounts([totalAmount.toString()], false, config.tokenDecimals || 18)[0]
+  const requiredEthAmount = (() => {
+    const amounts = parseAmounts(
+      config.recipients.map(r => r.amount || '0'),
+      true,
+      18,
+    )
+    const totalWei = amounts.reduce((a, b) => a + b, BigInt(0))
+    const fee = flatFee || BigInt(0)
+    return totalWei + fee
+  })()
 
-  const requiredAmount = parseAmounts([totalAmount.toString()], false, config.tokenDecimals || 18)[0]
-  const balanceCheck = balance ? balance >= requiredAmount : false
+  // Can send if: ETH -> user has enough ETH (incl. fee). ERC20 -> user has token balance (allowance handled in Step5)
+  const canSend = (
+    (config.tokenType === 'ETH' && ethBalance !== undefined && ethBalance >= requiredEthAmount) ||
+    (config.tokenType === 'ERC20' && balance && balance >= requiredTokenAmount)
+  )
+
+  const requiredAmount = config.tokenType === 'ETH' ? requiredEthAmount : requiredTokenAmount
+  const balanceCheck = config.tokenType === 'ETH'
+    ? (ethBalance !== undefined ? ethBalance >= requiredEthAmount : false)
+    : (balance ? balance >= requiredTokenAmount : false)
   
   console.log('🎯 Step4Review canSend check:', {
     tokenType: config.tokenType,
     isETH: config.tokenType === 'ETH',
-    balance: balance?.toString(),
+    balance: config.tokenType === 'ETH' ? ethBalance?.toString() : balance?.toString(),
     totalAmount: totalAmount.toString(),
     tokenDecimals: config.tokenDecimals,
     requiredAmount: requiredAmount.toString(),
@@ -156,7 +166,7 @@ export function Step4Review({ config, onConfigChange, onNext, onPrev }: StepProp
             Recipients ({config.recipients.length})
           </h5>
           <div className="space-y-1 max-h-32 overflow-y-auto">
-            {config.recipients.slice(0, 5).map((recipient, index) => (
+            {config.recipients.map((recipient, index) => (
               <div key={index} className="flex justify-between items-center p-2 border border-gray-200 dark:border-gray-800 rounded text-xs">
                 <span className="font-mono text-black dark:text-white">
                   {formatAddress(recipient.address)}
@@ -166,32 +176,26 @@ export function Step4Review({ config, onConfigChange, onNext, onPrev }: StepProp
                 </span>
               </div>
             ))}
-            {config.recipients.length > 5 && (
-              <div className="text-center text-xs text-gray-500 dark:text-gray-400 py-1">
-                ... and {config.recipients.length - 5} more recipients
-              </div>
-            )}
+           
           </div>
         </div>
 
-        {/* ETH Options */}
+        {/* ETH Info */}
         {config.tokenType === 'ETH' && (
-          <div>
-            <h5 className="text-xs font-medium text-black dark:text-white mb-2">ETH Options</h5>
-            <label className="flex items-start space-x-2">
-              <input
-                type="checkbox"
-                checked={revertOnFail}
-                onChange={(e) => handleRevertOnFailChange(e.target.checked)}
-                className="mt-1"
-              />
+          <div className="p-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+            <div className="flex items-start space-x-2">
+              <div className="w-4 h-4 text-blue-600 dark:text-blue-400 mt-0.5">
+                <svg fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                </svg>
+              </div>
               <div>
-                <div className="text-xs text-black dark:text-white">Revert entire transaction on failed transfers</div>
-                <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                  If unchecked, failed transfers are skipped and transaction continues
+                <div className="text-xs font-medium text-blue-800 dark:text-blue-200">Atomic Transfer</div>
+                <div className="text-xs text-blue-700 dark:text-blue-300 mt-1">
+                  All transfers must succeed or the entire transaction will be reverted
                 </div>
               </div>
-            </label>
+            </div>
           </div>
         )}
 

@@ -6,7 +6,6 @@ const initialConfig: MultisenderConfig = {
   tokenType: "ETH",
   recipients: [],
   amountMode: "fixed",
-  revertOnFail: true,
 };
 
 export function useMultisender() {
