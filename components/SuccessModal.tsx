@@ -35,37 +35,20 @@ export function SuccessModal({
   const handleShareToCast = async () => {
     setIsSharing(true)
     
-    const shareText = `🚀 Just sent ${formatAmount(totalAmount, 4, tokenSymbol)} ${tokenSymbol} to ${recipients.length} recipients using FarSender!\n\n` +
-      `Transaction: ${explorerUrl}\n` +
-      `Network: ${chainName}\n\n` +
-      `#FarSender #MultiSend #BatchSend`
-
     try {
-      // Use Farcaster SDK composeCast action
       const { sdk } = await import('@farcaster/miniapp-sdk')
       
       const result = await sdk.actions.composeCast({
-        text: shareText,
-        embeds: [explorerUrl], // Transaction explorer link as embed
-        channelKey: "farcaster" // Post to farcaster channel
-      })
-      
+        text: `🎯 Just sent crypto to ${recipients.length} people in one go! Who needs individual transactions when you can batch send? 😎\n\nTry FarSender for your next multi-send! 🚀\n\n#FarSender #MultiSend #BatchSend`,
+        embeds: [window.location.href],
+      });
+
       if (result?.cast) {
-        console.log('✅ Cast posted successfully:', result.cast.hash)
-      } else {
-        console.log('ℹ️ User cancelled cast composition')
+        console.log("Cast posted successfully:", result.cast.hash);
       }
-      
     } catch (error) {
-      console.error('❌ Cast composition failed:', error)
-      
-      // Fallback to copying to clipboard
-      try {
-        await navigator.clipboard.writeText(shareText)
-        alert('Share text copied to clipboard!')
-      } catch (clipboardError) {
-        console.error('Clipboard failed:', clipboardError)
-      }
+      console.error("Failed to compose cast:", error);
+      // Don't show error to user - this is expected for some users
     } finally {
       setIsSharing(false)
     }
