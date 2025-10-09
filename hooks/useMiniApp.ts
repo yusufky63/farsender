@@ -1,29 +1,33 @@
-'use client'
-import { useEffect, useState } from 'react'
+"use client";
+import { useEffect, useState } from "react";
 
 export function useMiniApp() {
-  const [isInMiniApp, setIsInMiniApp] = useState(false)
-  const [isLoading, setIsLoading] = useState(true)
+  const [isInMiniApp, setIsInMiniApp] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const checkMiniApp = async () => {
       try {
-        // const { sdk } = await import('@farcaster/miniapp-sdk')
-        // const inMiniApp = await sdk.isInMiniApp()
-        
-        // Placeholder - assume we're in mini app for development
-        const inMiniApp = true
-        setIsInMiniApp(inMiniApp)
+        // Development için origin kontrolünü bypass et
+        const isDevelopment = process.env.NODE_ENV === "development";
+
+        if (isDevelopment) {
+          setIsInMiniApp(true);
+        } else {
+          const { sdk } = await import("@farcaster/miniapp-sdk");
+          const inMiniApp = await sdk.isInMiniApp();
+          setIsInMiniApp(inMiniApp);
+        }
       } catch (error) {
-        console.error('Mini App kontrolü başarısız:', error)
-        setIsInMiniApp(false)
+        const isDevelopment = process.env.NODE_ENV === "development";
+        setIsInMiniApp(isDevelopment);
       } finally {
-        setIsLoading(false)
+        setIsLoading(false);
       }
-    }
+    };
 
-    checkMiniApp()
-  }, [])
+    checkMiniApp();
+  }, []);
 
-  return { isInMiniApp, isLoading }
+  return { isInMiniApp, isLoading };
 }

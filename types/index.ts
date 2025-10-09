@@ -2,6 +2,7 @@ export interface Recipient {
   address: string
   amount: string
   isValid?: boolean
+  displayName?: string
 }
 
 export interface MultisenderConfig {
@@ -29,7 +30,7 @@ export interface FarcasterUser {
   username: string
   displayName: string
   pfpUrl: string
-  bio: string
+  bio?: string
 }
 
 export interface StepProps {
@@ -59,4 +60,19 @@ export interface TokenInfo {
   logo?: string
   price?: number
   value_usd?: number
+}
+
+export interface FarcasterUser {
+  fid: number
+  username: string
+  displayName: string
+  pfpUrl: string
+  bio?: string
+  verifiedAddresses: {
+    ethAddresses: string[]
+    primary: { ethAddress: string }
+  }
+  custodyAddress: string
+  followerCount: number
+  followingCount: number
 }

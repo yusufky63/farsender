@@ -275,24 +275,94 @@ export function Step1TokenSelect({ config, onConfigChange, onNext }: StepProps) 
                     </Button>
                     
                     <div className="flex items-center space-x-1 shadow-sm p-0.5 rounded-lg">
-                      {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                        const pageNum = Math.max(1, Math.min(totalPages - 4, currentPage - 2)) + i
-                        if (pageNum > totalPages) return null
+                      {(() => {
+                        const maxVisiblePages = 5
                         
-                        return (
-                          <button
-                            key={pageNum}
-                            onClick={() => goToPage(pageNum)}
-                            className={`px-2 py-1 text-xs rounded transition-colors ${
-                              currentPage === pageNum
-                                ? 'bg-[#5638a1] text-white'
-                                : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-black/20 dark:hover:backdrop-blur-sm hover:text-[#5638a1] dark:hover:text-[#5638a1]'
-                            }`}
-                          >
-                            {pageNum}
-                          </button>
-                        )
-                      })}
+                        // Calculate visible page range
+                        let startPage = 1
+                        let endPage = totalPages
+                        
+                        if (totalPages > maxVisiblePages) {
+                          const halfVisible = Math.floor(maxVisiblePages / 2)
+                          
+                          if (currentPage <= halfVisible) {
+                            // Near the beginning
+                            startPage = 1
+                            endPage = maxVisiblePages
+                          } else if (currentPage >= totalPages - halfVisible) {
+                            // Near the end
+                            startPage = totalPages - maxVisiblePages + 1
+                            endPage = totalPages
+                          } else {
+                            // In the middle
+                            startPage = currentPage - halfVisible
+                            endPage = currentPage + halfVisible
+                          }
+                        }
+                        
+                        const pages = []
+                        
+                        // Add first page and ellipsis if needed
+                        if (startPage > 1) {
+                          pages.push(
+                            <button
+                              key={1}
+                              onClick={() => goToPage(1)}
+                              className="px-2 py-1 text-xs rounded transition-colors text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-black/20 dark:hover:backdrop-blur-sm hover:text-[#5638a1] dark:hover:text-[#5638a1]"
+                            >
+                              1
+                            </button>
+                          )
+                          
+                          if (startPage > 2) {
+                            pages.push(
+                              <span key="ellipsis1" className="px-1 text-gray-400">
+                                ...
+                              </span>
+                            )
+                          }
+                        }
+                        
+                        // Add visible pages
+                        for (let i = startPage; i <= endPage; i++) {
+                          pages.push(
+                            <button
+                              key={i}
+                              onClick={() => goToPage(i)}
+                              className={`px-2 py-1 text-xs rounded transition-colors ${
+                                currentPage === i
+                                  ? 'bg-[#5638a1] text-white'
+                                  : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-black/20 dark:hover:backdrop-blur-sm hover:text-[#5638a1] dark:hover:text-[#5638a1]'
+                              }`}
+                            >
+                              {i}
+                            </button>
+                          )
+                        }
+                        
+                        // Add ellipsis and last page if needed
+                        if (endPage < totalPages) {
+                          if (endPage < totalPages - 1) {
+                            pages.push(
+                              <span key="ellipsis2" className="px-1 text-gray-400">
+                                ...
+                              </span>
+                            )
+                          }
+                          
+                          pages.push(
+                            <button
+                              key={totalPages}
+                              onClick={() => goToPage(totalPages)}
+                              className="px-2 py-1 text-xs rounded transition-colors text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-black/20 dark:hover:backdrop-blur-sm hover:text-[#5638a1] dark:hover:text-[#5638a1]"
+                            >
+                              {totalPages}
+                            </button>
+                          )
+                        }
+                        
+                        return pages
+                      })()}
                     </div>
                     
                     <Button

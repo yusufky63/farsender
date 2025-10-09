@@ -167,13 +167,39 @@ export function Step4Review({ config, onConfigChange, onNext, onPrev }: StepProp
           </h5>
           <div className="space-y-1 max-h-32 overflow-y-auto">
             {config.recipients.map((recipient, index) => (
-              <div key={index} className="flex justify-between items-center p-2 border border-gray-200 dark:border-gray-800 rounded text-xs">
-                <span className="font-mono text-black dark:text-white">
-                  {formatAddress(recipient.address)}
-                </span>
-                <span className="text-gray-600 dark:text-gray-400">
-                  {formatAmount(recipient.amount)} {config.tokenSymbol || 'ETH'}
-                </span>
+              <div key={index} className="p-2 border border-gray-200 dark:border-gray-800 rounded text-xs">
+                <div className="flex justify-between items-center">
+                  <div className="flex-1 min-w-0">
+                    {recipient.displayName ? (
+                      <div className="flex items-center gap-2 mb-1">
+                        <div className="text-xs font-medium text-blue-600 dark:text-blue-400">
+                          {recipient.displayName}
+                        </div>
+                        {recipient.displayName.includes('.eth') ? (
+                          <span className="px-1 py-0.5 text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded">
+                            Base.eth
+                          </span>
+                        ) : recipient.displayName.startsWith('@') ? (
+                          <span className="px-1 py-0.5 text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded">
+                            Farcaster
+                          </span>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="px-1 py-0.5 text-xs bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-400 rounded">
+                          Direct Address
+                        </span>
+                      </div>
+                    )}
+                    <span className="font-mono text-black dark:text-white">
+                      {formatAddress(recipient.address)}
+                    </span>
+                  </div>
+                  <span className="text-gray-600 dark:text-gray-400 ml-2">
+                    {formatAmount(recipient.amount)} {config.tokenSymbol || 'ETH'}
+                  </span>
+                </div>
               </div>
             ))}
            

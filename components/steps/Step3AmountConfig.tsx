@@ -181,6 +181,28 @@ export function Step3AmountConfig({ config, onConfigChange, onNext, onPrev }: St
               {config.recipients.map((recipient, index) => (
                 <div key={index} className="flex items-center space-x-2">
                   <div className="flex-1 min-w-0">
+                    {recipient.displayName ? (
+                      <div className="flex items-center gap-2 mb-1">
+                        <div className="text-xs font-medium text-blue-600 dark:text-blue-400">
+                          {recipient.displayName}
+                        </div>
+                        {recipient.displayName.includes('.eth') ? (
+                          <span className="px-1 py-0.5 text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded">
+                            Base.eth
+                          </span>
+                        ) : recipient.displayName.startsWith('@') ? (
+                          <span className="px-1 py-0.5 text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded">
+                            Farcaster
+                          </span>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="px-1 py-0.5 text-xs bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-400 rounded">
+                          Direct Address
+                        </span>
+                      </div>
+                    )}
                     <div className="text-xs text-gray-600 dark:text-gray-400 mb-1">
                       {recipient.address.slice(0, 6)}...{recipient.address.slice(-4)}
                     </div>

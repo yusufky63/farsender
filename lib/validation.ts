@@ -98,9 +98,9 @@ export function validateRecipients(recipients: { address: string; amount: string
   return errors
 }
 
-export function removeDuplicateRecipients(recipients: { address: string; amount: string }[]): { address: string; amount: string }[] {
+export function removeDuplicateRecipients(recipients: { address: string; amount: string; displayName?: string }[]): { address: string; amount: string; displayName?: string }[] {
   const seen = new Set<string>()
-  const uniqueRecipients: { address: string; amount: string }[] = []
+  const uniqueRecipients: { address: string; amount: string; displayName?: string }[] = []
   
   for (const recipient of recipients) {
     const checksumAddress = getChecksumAddress(recipient.address)
@@ -111,7 +111,8 @@ export function removeDuplicateRecipients(recipients: { address: string; amount:
       // Use checksum address if available, otherwise keep original
       uniqueRecipients.push({
         address: checksumAddress || recipient.address,
-        amount: recipient.amount
+        amount: recipient.amount,
+        displayName: recipient.displayName
       })
     }
   }
@@ -204,4 +205,53 @@ export function validateTotalBalance(
   }
   
   return validateBalance(totalAmount.toString(), userBalance, decimals)
+}
+
+// Farcaster username detection and formatting
+export function isFarcasterUsername(input: string): boolean {
+  if (!input || typeof input !== 'string') return false
+  
+  const trimmed = input.trim()
+  
+  // If it starts with 0x, it's definitely an address
+  if (trimmed.startsWith('0x')) return false
+  
+  // If it's a valid Ethereum address (42 chars, hex), it's an address
+  if (trimmed.length === 42 && /^[0-9a-fA-F]+$/.test(trimmed)) return false
+  
+  // If it contains only alphanumeric characters, underscores, and hyphens, it's likely a username
+  // Farcaster usernames can contain letters, numbers, underscores, and hyphens
+  const usernamePattern = /^[a-zA-Z0-9_-]+$/
+  
+  return usernamePattern.test(trimmed)
+}
+
+export function formatFarcasterUsername(input: string): string {
+  if (!input || typeof input !== 'string') return ''
+  
+  // Remove @ prefix if present
+  const cleaned = input.trim().replace(/^@/, '')
+  
+  // Convert to lowercase for consistency
+  return cleaned.toLowerCase()
+}
+
+// Check if input is a Base.eth domain
+export function isBaseEthDomain(input: string): boolean {
+  if (!input || typeof input !== 'string') return false
+  
+  const trimmed = input.trim()
+  
+  // Check if it ends with .eth
+  return trimmed.endsWith('.eth') && trimmed.length > 4
+}
+
+// Format Base.eth domain
+export function formatBaseEthDomain(input: string): string {
+  if (!input || typeof input !== 'string') return ''
+  
+  const cleaned = input.trim().toLowerCase()
+  
+  // Ensure it ends with .eth
+  return cleaned.endsWith('.eth') ? cleaned : `${cleaned}.eth`
 }

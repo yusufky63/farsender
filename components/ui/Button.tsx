@@ -3,7 +3,7 @@ import React from 'react'
 interface ButtonProps {
   children: React.ReactNode
   variant?: 'primary' | 'secondary' | 'outline' | 'success' | 'warning' | 'danger'
-  size?: 'sm' | 'md' | 'lg'
+  size?: 'xs' | 'sm' | 'md' | 'lg'
   disabled?: boolean
   onClick?: () => void
   type?: 'button' | 'submit' | 'reset'
@@ -13,7 +13,7 @@ interface ButtonProps {
 export function Button({ 
   children, 
   variant = 'primary', 
-  size = 'sm', 
+  size = 'xs', 
   disabled = false,
   onClick,
   type = 'button',
@@ -31,6 +31,7 @@ export function Button({
   }
   
   const sizeClasses = {
+    xs: "px-2 py-1 text-xs",
     sm: "px-4 py-1.5 text-sm",
     md: "px-6 py-1.5 text-base",
     lg: "px-8 py-1.5 text-lg"

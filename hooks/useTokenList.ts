@@ -28,7 +28,7 @@ export function useTokenList() {
   const [totalCount, setTotalCount] = useState(0)
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPages, setTotalPages] = useState(0)
-  const pageSize = 5
+  const pageSize = 8
 
   // Fetch tokens with pagination
   useEffect(() => {
