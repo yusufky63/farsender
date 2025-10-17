@@ -9,6 +9,7 @@ import { Step5Transaction } from "@/components/steps/Step5Transaction";
 import { WalletConnection } from "@/components/WalletConnection";
 import { ContractStats } from "@/components/ContractStats";
 import { useMultisender } from "@/hooks/useMultisender";
+import { useApps } from "@/hooks/useApps";
 import Image from "next/image";
 import { useState } from "react";
 
@@ -20,27 +21,8 @@ export default function HomePage() {
   const [isStatsOpen, setIsStatsOpen] = useState(false);
   const [isHowItWorksOpen, setIsHowItWorksOpen] = useState(false);
 
-  // Apps data
-  const apps = [
-    {
-      id: 1,
-      name: "fRevoke",
-      icon: "/assets/frevoke-icon.png",
-      url: "https://farcaster.xyz/miniapps/aXupmg6n1SY4/frevoke",
-    },
-    {
-      id: 2,
-      name: "Base Counter",
-      icon: "/assets/base-counter-icon.png",
-      url: "https://farcaster.xyz/miniapps/7upwS7ktoVAn/base-counter",
-    },
-    {
-      id: 3,
-      name: "8BitCoiner",
-      icon: "/assets/8bitcoiner-icon.png",
-      url: "https://farcaster.xyz/miniapps/VJFTWn45l8cA/8bitcoiner",
-    },
-  ];
+  // Load apps from JSON
+  const { apps, isLoading: appsLoading, error: appsError } = useApps();
 
   const renderCurrentStep = () => {
     const stepProps = {
@@ -185,51 +167,84 @@ export default function HomePage() {
               </div>
 
               <div className="space-y-2">
-                {apps.map((app) => (
-                  <div
-                    key={app.id}
-                    className="border border-gray-200 dark:border-gray-800 rounded-lg p-2 hover:border-[#5638a1] dark:hover:border-[#5638a1] transition-colors bg-white dark:bg-transparent"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 rounded-lg overflow-hidden">
-                        <Image
-                          src={app.icon}
-                          alt={app.name}
-                          width={36}
-                          height={36}
-                          className="w-full h-full object-cover"
-                        />
-                      </div>
-                      <div className="flex-1">
-                        <h3 className="font-semibold text-gray-900 dark:text-white">
-                          {app.name}
-                        </h3>
-                      </div>
-                      <a
-                        href={app.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-2 px-2 py-1 bg-[#5638a1] text-white text-sm rounded-lg hover:bg-[#5638a1]/90 transition-colors"
-                      >
-                        <svg
-                          width="12"
-                          height="12"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth="2"
-                            d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
-                          />
-                        </svg>
-                        Open
-                      </a>
+                {appsLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="flex items-center space-x-2">
+                      <div className="w-4 h-4 border-2 border-[#5638a1] border-t-transparent rounded-full animate-spin"></div>
+                      <span className="text-sm text-gray-600 dark:text-gray-400">Loading apps...</span>
                     </div>
                   </div>
-                ))}
+                ) : appsError ? (
+                  <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                    <p className="text-sm text-red-700 dark:text-red-400">
+                      Failed to load apps: {appsError}
+                    </p>
+                  </div>
+                ) : apps.length === 0 ? (
+                  <div className="p-4 bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-800 rounded-lg">
+                    <p className="text-sm text-gray-600 dark:text-gray-400 text-center">
+                      No apps available
+                    </p>
+                  </div>
+                ) : (
+                  apps.map((app) => (
+                    <div
+                      key={app.id}
+                      className="border border-gray-200 dark:border-gray-800 rounded-lg p-3 hover:border-[#5638a1] dark:hover:border-[#5638a1] transition-colors bg-white dark:bg-transparent"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-800">
+                          <Image
+                            src={app.icon}
+                            alt={app.name}
+                            width={48}
+                            height={48}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              // Fallback to app name initials if image fails
+                              const target = e.target as HTMLImageElement
+                              target.style.display = 'none'
+                              const parent = target.parentElement
+                              if (parent) {
+                                parent.innerHTML = `<div class="w-full h-full flex items-center justify-center bg-[#5638a1] text-white font-semibold text-sm">${app.name.slice(0, 2).toUpperCase()}</div>`
+                              }
+                            }}
+                          />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-semibold text-gray-900 dark:text-white text-sm">
+                            {app.name}
+                          </h3>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                            {app.description}
+                          </p>
+                        </div>
+                        <a
+                          href={app.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#5638a1] text-white text-xs rounded-lg hover:bg-[#5638a1]/90 transition-colors whitespace-nowrap"
+                        >
+                          <svg
+                            width="12"
+                            height="12"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth="2"
+                              d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+                            />
+                          </svg>
+                          Open
+                        </a>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           </div>

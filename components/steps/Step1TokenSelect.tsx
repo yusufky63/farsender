@@ -32,7 +32,11 @@ export function Step1TokenSelect({ config, onConfigChange, onNext }: StepProps) 
     nextPage,
     prevPage,
     hasNextPage,
-    hasPrevPage
+    hasPrevPage,
+    hideSpamAndLowValueTokens,
+    setHideSpamAndLowValueTokens,
+    hiddenTokensCount,
+    visibleCount
   } = useTokenList()
 
   // Filter tokens based on search query
@@ -148,6 +152,31 @@ export function Step1TokenSelect({ config, onConfigChange, onNext }: StepProps) 
             Manual Add
           </button>
         </div>
+
+        {/* Filter Control Panel */}
+        {activeTab === 'tokens' && (
+          <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-800 rounded-lg">
+            <div className="flex items-center gap-3">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={hideSpamAndLowValueTokens}
+                  onChange={(e) => setHideSpamAndLowValueTokens(e.target.checked)}
+                  className="w-4 h-4 rounded border-gray-300"
+                />
+                <span className="text-sm text-gray-700 dark:text-gray-300">
+                  Hide spam & low value tokens
+                </span>
+              </label>
+            </div>
+            <div className="text-xs text-gray-500 dark:text-gray-400">
+              {totalCount} tokens
+              {hideSpamAndLowValueTokens && hiddenTokensCount > 0 && (
+                <span> ({hiddenTokensCount} hidden)</span>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Tab Content */}
         <div className="space-y-2">

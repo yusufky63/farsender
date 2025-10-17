@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useAccount } from 'wagmi'
+import { filterTokensWithSpamDetection } from '@/lib/spam-detection'
 
 export interface TokenInfo {
   contractAddress: string
@@ -28,6 +29,7 @@ export function useTokenList() {
   const [totalCount, setTotalCount] = useState(0)
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPages, setTotalPages] = useState(0)
+  const [hideSpamAndLowValueTokens, setHideSpamAndLowValueTokens] = useState(true)
   const pageSize = 8
 
   // Fetch tokens with pagination
@@ -65,39 +67,20 @@ export function useTokenList() {
           hasMore: false
         }
         
-        // Filter out scam/spam tokens
-        const filteredTokens = data.tokens.filter(token => {
-          // Safe check for undefined/null values
-          const name = (token.name || '').toLowerCase()
-          const symbol = (token.symbol || '').toLowerCase()
-          
-          // Filter out common scam indicators
-          const scamKeywords = [
-            'test', 'fake', 'scam', 'honeypot', 'rug', 'moon', 'safe', 'baby', 'mini',
-            'airdrop', 'claim', 'free', 'giveaway', 'promo', 'presale', 'ico', 'ido',
-            'telegram', 'tg', 'twitter', 'tweet', 'discord', 'discord.gg', 't.me',
-            'elon', 'musk', 'doge', 'shib', 'pepe', 'floki', 'safemoon', 'pump',
-            '100x', '1000x', 'moon', 'mars', 'lambo', 'yacht', 'diamond', 'hands'
-          ]
-          
-          // Check for emoji patterns (simple approach - check for common emoji characters)
-          const emojiChars = ['🚀', '💎', '🔥', '⭐', '💰', '🎯', '📈', '💪', '🎉', '🦍', '🐕', '🐸', '🌙', '🌍', '🌎', '🌏', '⭐', '🌟', '✨', '💫', '⚡', '🔥', '💥', '💢', '💯', '💯', '🎊', '🎉', '🎈', '🎁', '🎀', '🎂', '🍰', '🧁', '🍭', '🍬', '🍫', '🍪', '🍩', '🍨', '🍧', '🍦', '🍰', '🎂', '🍭', '🍬', '🍫', '🍪', '🍩', '🍨', '🍧', '🍦']
-          const hasEmojis = emojiChars.some(emoji => (name + symbol).includes(emoji))
-          
-          // Check for social media links
-          const hasSocialLinks = /(t\.me|telegram|twitter|discord|youtube|instagram|facebook)/i.test(name + symbol)
-          
-          // Check for suspicious patterns
-          const hasSuspiciousPatterns = /(100x|1000x|moon|mars|lambo|yacht|diamond|hands|hodl|to the moon)/i.test(name + symbol)
-          
-          return !scamKeywords.some(keyword => 
-            name.includes(keyword) || symbol.includes(keyword)
-          ) && 
-          !hasEmojis && 
-          !hasSocialLinks && 
-          !hasSuspiciousPatterns &&
-          token.balance !== '0' // Only show tokens with balance
-        })
+        // Apply filtering based on toggle state
+        let filteredTokens
+        if (hideSpamAndLowValueTokens) {
+          // Apply spam filtering when toggle is ON
+          const spamFilteredTokens = filterTokensWithSpamDetection(data.tokens, true)
+          filteredTokens = spamFilteredTokens.filter(token => 
+            token.balance !== '0' // Only show tokens with balance
+          )
+        } else {
+          // Show all tokens from API when toggle is OFF (only filter by balance)
+          filteredTokens = data.tokens.filter(token => 
+            token.balance !== '0' // Only show tokens with balance
+          )
+        }
         
         setAllTokens(filteredTokens)
         setTotalCount(filteredTokens.length)
@@ -113,7 +96,7 @@ export function useTokenList() {
     }
 
     fetchTokens()
-  }, [address, chain])
+  }, [address, chain, hideSpamAndLowValueTokens])
 
   // Get current page tokens
   const getCurrentPageTokens = () => {
@@ -122,14 +105,23 @@ export function useTokenList() {
     return allTokens.slice(startIndex, endIndex)
   }
 
+  // Get filtered tokens for pagination calculations
+  const getFilteredTokens = () => {
+    return allTokens
+  }
+
   const goToPage = (page: number) => {
-    if (page >= 1 && page <= totalPages) {
+    const filteredTokens = getFilteredTokens()
+    const maxPages = Math.ceil(filteredTokens.length / pageSize)
+    if (page >= 1 && page <= maxPages) {
       setCurrentPage(page)
     }
   }
 
   const nextPage = () => {
-    if (currentPage < totalPages) {
+    const filteredTokens = getFilteredTokens()
+    const maxPages = Math.ceil(filteredTokens.length / pageSize)
+    if (currentPage < maxPages) {
       setCurrentPage(currentPage + 1)
     }
   }
@@ -140,6 +132,13 @@ export function useTokenList() {
     }
   }
 
+  // Calculate counts for display
+  const hiddenTokensCount = allTokens.length - allTokens.length
+  const visibleCount = allTokens.length
+
+  const filteredTokens = getFilteredTokens()
+  const filteredTotalPages = Math.ceil(filteredTokens.length / pageSize)
+
   return {
     tokens: getCurrentPageTokens(),
     allTokens,
@@ -147,13 +146,17 @@ export function useTokenList() {
     error,
     totalCount,
     currentPage,
-    totalPages,
+    totalPages: filteredTotalPages,
     pageSize,
     goToPage,
     nextPage,
     prevPage,
-    hasNextPage: currentPage < totalPages,
+    hasNextPage: currentPage < filteredTotalPages,
     hasPrevPage: currentPage > 1,
+    hideSpamAndLowValueTokens,
+    setHideSpamAndLowValueTokens,
+    hiddenTokensCount,
+    visibleCount,
     refetch: () => {
       setAllTokens([])
       setCurrentPage(1)

@@ -45,6 +45,7 @@ export function Step3AmountConfig({ config, onConfigChange, onNext, onPrev }: St
         fixedAmount
       })
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fixedAmount, amountMode])
 
   // Clear amounts when token changes to avoid validation errors
@@ -61,6 +62,7 @@ export function Step3AmountConfig({ config, onConfigChange, onNext, onPrev }: St
         recipients: updatedRecipients
       })
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [config.tokenAddress])
 
   const updateRecipientAmount = (index: number, amount: string) => {
