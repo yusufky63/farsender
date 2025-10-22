@@ -52,14 +52,7 @@ export function validateRecipients(recipients: { address: string; amount: string
     return errors
   }
   
-  // Check max recipients
-  const maxRecipients = 300 // ETH limit, ERC20 is 200
-  if (recipients.length > maxRecipients) {
-    errors.push({ 
-      field: 'recipients', 
-      message: `Maximum ${maxRecipients} recipients allowed` 
-    })
-  }
+  // No recipient limit - batch system handles large lists
   
   // Validate each recipient
   recipients.forEach((recipient, index) => {
@@ -71,13 +64,16 @@ export function validateRecipients(recipients: { address: string; amount: string
       })
     }
     
-    // Amount validation is optional in Step 2 (can be set in Step 3)
-    const amountError = validateAmount(recipient.amount, false)
-    if (amountError) {
-      errors.push({ 
-        field: `recipient_${index}_amount`, 
-        message: `Recipient ${index + 1}: ${amountError.message}` 
-      })
+    // Skip amount validation in Step 2 - amounts will be set in Step 3
+    // Only validate if amount is provided and not empty
+    if (recipient.amount && recipient.amount.trim() !== '') {
+      const amountError = validateAmount(recipient.amount, false)
+      if (amountError) {
+        errors.push({ 
+          field: `recipient_${index}_amount`, 
+          message: `Recipient ${index + 1}: ${amountError.message}` 
+        })
+      }
     }
   })
   

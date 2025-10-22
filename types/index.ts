@@ -3,6 +3,13 @@ export interface Recipient {
   amount: string
   isValid?: boolean
   displayName?: string
+  name?: string
+  farcasterProfile?: {
+    fid: number
+    username: string
+    displayName: string
+    pfpUrl?: string
+  }
 }
 
 export interface MultisenderConfig {

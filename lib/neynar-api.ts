@@ -1,223 +1,357 @@
-// Neynar API integration for Farcaster user lookup
-export interface NeynarUser {
+/**
+ * Neynar API wrapper for Farcaster interactions
+ */
+
+export interface FarcasterUser {
   fid: number
   username: string
   display_name: string
-  custody_address: string
   pfp_url: string
-  profile?: {
-    bio?: {
-      text?: string
+  verified_addresses?: {
+    eth_addresses?: string[]
+    primary?: {
+      eth_address?: string
     }
   }
-  verified_addresses: {
-    eth_addresses: string[]
-    primary: {
-      eth_address: string
-    }
-  }
-  follower_count: number
-  following_count: number
+  verifications?: string[]
+  follower_count?: number
+  following_count?: number
+  power_badge?: boolean
 }
 
-export interface NeynarSearchResponse {
-  result: {
-    users: NeynarUser[]
-    next?: {
-      cursor: string
-    }
+export interface CastReaction {
+  reaction_type: 'like' | 'recast'
+  user: FarcasterUser
+}
+
+export interface Cast {
+  hash: string
+  author: FarcasterUser
+  text: string
+  reactions: {
+    likes_count: number
+    recasts_count: number
   }
 }
 
-// Removed NeynarBulkResponse as bulk-by-username endpoint doesn't exist
+export interface FarcasterImportResult {
+  users: Array<{
+    address: string
+    name: string
+    username: string
+    fid: number
+    pfpUrl?: string
+  }>
+  totalFound: number
+  withWallets: number
+}
 
 export class NeynarAPI {
-  private apiKey: string
-  private baseUrl = 'https://api.neynar.com/v2'
+  private async request(action: string, params?: Record<string, any>) {
+    const response = await fetch('/api/neynar', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        action,
+        ...params
+      })
+    })
 
-  constructor(apiKey: string) {
-    this.apiKey = apiKey
+    if (!response.ok) {
+      throw new Error(`Neynar API error: ${response.status} ${response.statusText}`)
+    }
+
+    return response.json()
   }
 
-  // Cache for 5 minutes
-  private cache = new Map<string, { data: any, timestamp: number }>()
-  private CACHE_DURATION = 5 * 60 * 1000 // 5 minutes in milliseconds
-
-  private getCacheKey(query: string): string {
-    return `neynar-${query.toLowerCase()}`
-  }
-
-  private getCachedData(query: string): any | null {
-    const key = this.getCacheKey(query)
-    const cached = this.cache.get(key)
+  /**
+   * Extract cast hash from Farcaster URL
+   */
+  extractCastHashFromUrl(url: string): string | null {
+    // Farcaster URL formats:
+    // https://farcaster.xyz/v/0x12345678
+    // https://warpcast.com/username/0x12345678
+    // https://warpcast.com/~/conversations/0x12345678
     
-    if (cached && Date.now() - cached.timestamp < this.CACHE_DURATION) {
-      console.log('📦 Using cached Neynar data for', key)
-      return cached.data
+    // Extract hash from any of these formats
+    const match = url.match(/0x([a-fA-F0-9]{8,})/)
+    if (match) {
+      const shortHash = `0x${match[1]}`
+      
+      // If it's already a full hash (40+ chars), return it
+      if (match[1].length >= 40) {
+        return shortHash
+      }
+      
+      // If it's a short hash (8 chars), we need to get the full hash from the cast
+      // For now, return the short hash and we'll expand it in getCast
+      return shortHash
     }
     
     return null
   }
 
-  private setCachedData(query: string, data: any): void {
-    const key = this.getCacheKey(query)
-    this.cache.set(key, {
-      data,
-      timestamp: Date.now()
-    })
-    console.log('💾 Cached Neynar data for', key)
-  }
-
-  // Search for Farcaster users by username (using free tier endpoint)
-  async searchUsers(query: string, limit = 5): Promise<NeynarUser[]> {
-    try {
-      // Check cache first
-      const cachedData = this.getCachedData(`search-${query}`)
-      if (cachedData) {
-        return cachedData
-      }
-
-      // Use the free tier endpoint for user search
-      const url = `${this.baseUrl}/farcaster/user/search`
-      const params = new URLSearchParams({
-        q: query,
-        limit: limit.toString()
+  /**
+   * Get cast by hash or URL
+   */
+  async getCast(hashOrUrl: string): Promise<Cast> {
+    // If it's a full URL, use URL type, otherwise use hash type
+    if (hashOrUrl.includes('farcaster.xyz') || hashOrUrl.includes('warpcast.com')) {
+      const response = await this.request('getCast', { 
+        identifier: hashOrUrl,
+        type: 'url'
       })
-
-      console.log('🌐 Neynar API Request (Free Tier):', { url, query })
-
-      const response = await fetch(`${url}?${params}`, {
-        method: 'GET',
-        headers: {
-          'x-api-key': this.apiKey,
-          'Content-Type': 'application/json'
-        },
-        mode: 'cors',
-        credentials: 'omit'
+      return response.cast
+    } else {
+      const response = await this.request('getCast', { 
+        identifier: hashOrUrl,
+        type: 'hash'
       })
-
-      console.log('📡 Neynar API Response Status:', response.status)
-
-      if (!response.ok) {
-        const errorText = await response.text()
-        console.error('❌ Neynar API Error Response:', errorText)
-        
-        // Check if it's a rate limit or plan limitation error
-        if (response.status === 429) {
-          throw new Error('Rate limit exceeded. Please try again later.')
-        } else if (response.status === 403) {
-          throw new Error('API key does not have permission for this endpoint. Please check your plan.')
-        }
-        
-        throw new Error(`Neynar API error! status: ${response.status}, message: ${errorText}`)
-      }
-
-      const data: NeynarSearchResponse = await response.json()
-      const users = data.result.users
-
-      // Cache the results
-      this.setCachedData(`search-${query}`, users)
-      
-      return users
-    } catch (error) {
-      console.error('❌ Failed to search users from Neynar:', error)
-      throw error
+      return response.cast
     }
   }
 
-  // Get user by exact username (using search endpoint)
-  async getUserByUsername(username: string): Promise<NeynarUser | null> {
+  /**
+   * Get reactions for a cast with pagination
+   */
+  async getCastReactions(hash: string, reactionType?: 'like' | 'recast'): Promise<CastReaction[]> {
     try {
-      // Check cache first
-      const cachedData = this.getCachedData(`user-${username}`)
-      if (cachedData) {
-        return cachedData
-      }
+      const allReactions: CastReaction[] = []
+      let cursor: string | undefined = undefined
+      let hasMore = true
+      let requestCount = 0
+      const maxRequests = 30 // Limit to prevent infinite loops (30 * 100 = 3000 max reactions)
 
-      // Use search endpoint - this is the correct endpoint for username lookup
-      const url = `${this.baseUrl}/farcaster/user/search`
-      const params = new URLSearchParams({
-        q: username,
-        limit: '5' // Get a few results to find exact match
-      })
-      
-      console.log('🌐 Neynar API Request for user:', { url, username })
-
-      const response = await fetch(`${url}?${params}`, {
-        method: 'GET',
-        headers: {
-          'x-api-key': this.apiKey,
-          'Content-Type': 'application/json'
-        },
-        mode: 'cors',
-        credentials: 'omit'
-      })
-
-      if (!response.ok) {
-        const errorText = await response.text()
-        console.error('❌ Neynar API Error Response:', errorText)
-        
-        // Check for specific error types
-        if (response.status === 429) {
-          throw new Error('Rate limit exceeded. Please try again later.')
-        } else if (response.status === 402) {
-          throw new Error('This feature requires a paid plan. Please upgrade your Neynar plan.')
-        } else if (response.status === 403) {
-          throw new Error('API key does not have permission for this endpoint. Please check your plan.')
+      while (hasMore && requestCount < maxRequests) {
+        const params: any = {
+          hash: hash,
+          types: reactionType === 'recast' ? 'recasts' : 'likes',
+          limit: 100 // Max limit per request (API limit)
         }
+
+        if (cursor) {
+          params.cursor = cursor
+        }
+
+        console.log(`Fetching reactions page ${requestCount + 1}, cursor: ${cursor}`)
+        console.log('Request params:', params)
         
-        throw new Error(`Neynar API error! status: ${response.status}, message: ${errorText}`)
+        const response = await this.request('getCastReactions', params)
+        
+        console.log('API Response structure:', {
+          hasReactions: !!response.reactions,
+          reactionsCount: response.reactions?.length || 0,
+          hasNext: !!response.next,
+          nextCursor: response.next?.cursor,
+          fullResponse: response
+        })
+        
+        const reactions = response.reactions || []
+        allReactions.push(...reactions)
+        
+        // Check if there's more data
+        cursor = response.next?.cursor
+        hasMore = !!cursor && reactions.length > 0
+        requestCount++
+        
+        console.log(`Got ${reactions.length} reactions, total: ${allReactions.length}, hasMore: ${hasMore}, cursor: ${cursor}`)
+        
+        // Small delay between requests to be nice to the API
+        if (hasMore) {
+          await new Promise(resolve => setTimeout(resolve, 100))
+        }
       }
 
-      const data: NeynarSearchResponse = await response.json()
-      
-      // Find the exact username match (case insensitive)
-      const user = data.result.users.find(u => u.username.toLowerCase() === username.toLowerCase())
-
-      if (!user) {
-        return null
-      }
-
-      // Cache the result
-      this.setCachedData(`user-${username}`, user)
-      
-      return user
+      console.log(`Total reactions fetched: ${allReactions.length}`)
+      return allReactions
     } catch (error) {
-      console.error('❌ Failed to get user from Neynar:', error)
-      throw error
+      console.error('Reactions endpoint failed:', error)
+      return []
     }
   }
 
-  // Get multiple users by usernames (using search endpoint for each)
-  async getUsersByUsernames(usernames: string[]): Promise<NeynarUser[]> {
+  /**
+   * Get user by username
+   */
+  async getUserByUsername(username: string): Promise<FarcasterUser | null> {
     try {
-      // Since bulk-by-username doesn't exist, we'll search for each username
-      // This is still efficient with caching
-      const users: NeynarUser[] = []
-      
-      for (const username of usernames) {
-        try {
-          const user = await this.getUserByUsername(username)
-          if (user) {
-            users.push(user)
-          }
-        } catch (error) {
-          console.warn(`Failed to get user ${username}:`, error)
-          // Continue with other usernames even if one fails
+      const response = await this.request('getUserByUsername', {
+        username: username
+      })
+      return response.user || null
+    } catch (error) {
+      console.error('User lookup failed:', error)
+      return null
+    }
+  }
+
+  /**
+   * Get conversation (comments) for a cast with pagination
+   */
+  async getCastConversation(hash: string): Promise<Cast[]> {
+    try {
+      const allComments: Cast[] = []
+      let cursor: string | undefined = undefined
+      let hasMore = true
+      let requestCount = 0
+      const maxRequests = 30 // Limit for comments (30 * 50 = 1500 max comments)
+
+      while (hasMore && requestCount < maxRequests) {
+        const params: any = {
+          identifier: hash,
+          type: 'hash',
+          reply_depth: 1,
+          include_chronological_parent_casts: false,
+          limit: 50
+        }
+
+        if (cursor) {
+          params.cursor = cursor
+        }
+
+        console.log(`Fetching comments page ${requestCount + 1}, cursor: ${cursor}`)
+        
+        const response = await this.request('getCastConversation', params)
+        
+        const comments = response.conversation?.cast?.direct_replies || []
+        allComments.push(...comments)
+        
+        // Check if there's more data
+        cursor = response.next?.cursor
+        hasMore = !!cursor && comments.length > 0
+        requestCount++
+        
+        console.log(`Got ${comments.length} comments, total: ${allComments.length}, hasMore: ${hasMore}`)
+        
+        // Small delay between requests
+        if (hasMore) {
+          await new Promise(resolve => setTimeout(resolve, 100))
         }
       }
-      
-      return users
+
+      console.log(`Total comments fetched: ${allComments.length}`)
+      return allComments
     } catch (error) {
-      console.error('❌ Failed to get users from Neynar:', error)
-      throw error
+      console.error('Conversation endpoint failed:', error)
+      return []
+    }
+  }
+
+
+  /**
+   * Import users from Farcaster cast interactions
+   */
+  async importFromCast(
+    url: string, 
+    options: {
+      includeLikes?: boolean
+      includeRecasts?: boolean  
+      includeComments?: boolean
+    } = {}
+  ): Promise<FarcasterImportResult> {
+    const { includeLikes = true, includeRecasts = true, includeComments = true } = options
+    
+    // Extract cast hash from URL (optional, we'll try URL method first)
+    const castHash = this.extractCastHashFromUrl(url)
+
+    const allUsers = new Map<number, FarcasterUser>() // Use Map to avoid duplicates by FID
+
+    try {
+      console.log('Processing URL:', url)
+      
+      // Try to get the cast using the full URL first
+      let cast
+      let fullHash
+      
+      try {
+        // First try with the full URL
+        cast = await this.getCast(url)
+        fullHash = cast.hash
+        console.log('Got cast from URL, full hash:', fullHash)
+      } catch (urlError) {
+        console.log('URL method failed, trying with extracted hash...')
+        
+        // If URL method fails, try with extracted hash
+        if (!castHash) {
+          throw new Error('Could not extract hash from URL and URL method failed')
+        }
+        
+        cast = await this.getCast(castHash)
+        if (!cast) {
+          throw new Error('Cast not found. Please check the URL.')
+        }
+        
+        fullHash = cast.hash
+        console.log('Got cast from hash, full hash:', fullHash)
+      }
+
+      // Get reactions (likes and recasts) - user data is already included
+      if (includeLikes || includeRecasts) {
+        const reactionTypes = []
+        if (includeLikes) reactionTypes.push('likes')
+        if (includeRecasts) reactionTypes.push('recasts')
+        
+        for (const type of reactionTypes) {
+          const reactions = await this.getCastReactions(fullHash, type as 'like' | 'recast')
+          reactions.forEach(reaction => {
+            // User data is already included in the reaction, no need for additional API call
+            allUsers.set(reaction.user.fid, reaction.user)
+          })
+        }
+      }
+
+      // Get comments - user data is already included
+      if (includeComments) {
+        const comments = await this.getCastConversation(fullHash)
+        comments.forEach(comment => {
+          // User data is already included in the comment author, no need for additional API call
+          allUsers.set(comment.author.fid, comment.author)
+        })
+      }
+
+      const usersArray = Array.from(allUsers.values())
+      console.log('Found users with full data:', usersArray.length)
+      
+      if (usersArray.length === 0) {
+        return {
+          users: [],
+          totalFound: 0,
+          withWallets: 0
+        }
+      }
+
+      // Filter users with wallet addresses and format result
+      const usersWithWallets = usersArray
+        .filter(user => user.verified_addresses?.eth_addresses && user.verified_addresses.eth_addresses.length > 0)
+        .map(user => ({
+          address: user.verified_addresses!.eth_addresses![0],
+          name: user.display_name || user.username,
+          username: user.username,
+          fid: user.fid,
+          pfpUrl: user.pfp_url
+        }))
+
+      return {
+        users: usersWithWallets,
+        totalFound: usersArray.length,
+        withWallets: usersWithWallets.length
+      }
+
+    } catch (error) {
+      console.error('Error importing from Farcaster:', error)
+      throw new Error(`Failed to import from Farcaster: ${error instanceof Error ? error.message : 'Unknown error'}`)
     }
   }
 }
 
-// Usage example:
-/*
-const neynar = new NeynarAPI(process.env.NEXT_PUBLIC_NEYNAR_API_KEY!)
-const users = await neynar.searchUsers('vitalik')
-const user = await neynar.getUserByUsername('vitalik')
-*/
+// Singleton instance
+let neynarInstance: NeynarAPI | null = null
+
+export function getNeynarAPI(): NeynarAPI {
+  if (!neynarInstance) {
+    neynarInstance = new NeynarAPI()
+  }
+  return neynarInstance
+}

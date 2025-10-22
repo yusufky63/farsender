@@ -11,6 +11,7 @@ import { ContractStats } from "@/components/ContractStats";
 import { useMultisender } from "@/hooks/useMultisender";
 import { useApps } from "@/hooks/useApps";
 import Image from "next/image";
+import Link from "next/link";
 import { useState } from "react";
 
 export default function HomePage() {
@@ -23,6 +24,8 @@ export default function HomePage() {
 
   // Load apps from JSON
   const { apps, isLoading: appsLoading, error: appsError } = useApps();
+
+
 
   const renderCurrentStep = () => {
     const stepProps = {
@@ -292,15 +295,16 @@ export default function HomePage() {
       {/* How it Works Modal */}
       {isHowItWorksOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50 p-3">
-          <div className="bg-white dark:bg-transparent rounded-xl shadow-2xl max-w-lg w-full max-h-[80vh] overflow-y-auto border border-gray-200 dark:border-gray-800">
-            <div className="p-4">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+          <div className="bg-white dark:bg-transparent rounded-xl shadow-2xl max-w-lg w-full max-h-[80vh] overflow-hidden border border-gray-200 dark:border-gray-800 flex flex-col">
+            {/* Sticky Header */}
+            <div className="sticky top-0 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 p-3 z-10">
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-bold text-gray-900 dark:text-white">
                   How it Works
                 </h2>
                 <button
                   onClick={() => setIsHowItWorksOpen(false)}
-                  className="p-2 hover:bg-transparent rounded-lg transition-colors"
+                  className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
                 >
                   <svg
                     width="18"
@@ -318,83 +322,95 @@ export default function HomePage() {
                   </svg>
                 </button>
               </div>
+            </div>
+            
+            {/* Scrollable Content */}
+            <div className="flex-1 overflow-y-auto p-3">
 
-              <div className="space-y-4 text-sm text-gray-700 dark:text-gray-300">
+              <div className="space-y-3 text-xs text-gray-700 dark:text-gray-300">
                 {/* Process Steps */}
                 <div>
-                  <h3 className="font-semibold text-gray-900 dark:text-white mb-2">Process:</h3>
-                  <div className="space-y-3">
-                    <div className="flex items-start space-x-3">
-                      <span className="flex-shrink-0 w-6 h-6 bg-gray-600 dark:bg-gray-400 text-white dark:text-gray-900 text-sm rounded-full flex items-center justify-center font-semibold">1</span>
+                  <h3 className="font-semibold text-gray-900 dark:text-white mb-2 text-sm">Process:</h3>
+                  <div className="space-y-2">
+                    <div className="flex items-start space-x-2">
+                      <span className="flex-shrink-0 w-5 h-5 bg-gray-600 dark:bg-gray-400 text-white dark:text-gray-900 text-xs rounded-full flex items-center justify-center font-semibold">1</span>
                       <p className="text-gray-700 dark:text-gray-300">Select your token (ETH or ERC20) from your wallet</p>
                     </div>
-                    <div className="flex items-start space-x-3">
-                      <span className="flex-shrink-0 w-6 h-6 bg-gray-600 dark:bg-gray-400 text-white dark:text-gray-900 text-sm rounded-full flex items-center justify-center font-semibold">2</span>
-                      <p className="text-gray-700 dark:text-gray-300">Add recipient addresses (wallet addresses, Farcaster usernames, or Base.eth domains)</p>
+                    <div className="flex items-start space-x-2">
+                      <span className="flex-shrink-0 w-5 h-5 bg-gray-600 dark:bg-gray-400 text-white dark:text-gray-900 text-xs rounded-full flex items-center justify-center font-semibold">2</span>
+                      <p className="text-gray-700 dark:text-gray-300">Add recipients: wallet addresses, Farcaster usernames (@username), Base.eth domains, or import from Farcaster cast (likes, recasts, comments)</p>
                     </div>
-                    <div className="flex items-start space-x-3">
-                      <span className="flex-shrink-0 w-6 h-6 bg-gray-600 dark:bg-gray-400 text-white dark:text-gray-900 text-sm rounded-full flex items-center justify-center font-semibold">3</span>
+                    <div className="flex items-start space-x-2">
+                      <span className="flex-shrink-0 w-5 h-5 bg-gray-600 dark:bg-gray-400 text-white dark:text-gray-900 text-xs rounded-full flex items-center justify-center font-semibold">3</span>
                       <p className="text-gray-700 dark:text-gray-300">Configure amounts (equal distribution or custom amounts)</p>
                     </div>
-                    <div className="flex items-start space-x-3">
-                      <span className="flex-shrink-0 w-6 h-6 bg-gray-600 dark:bg-gray-400 text-white dark:text-gray-900 text-sm rounded-full flex items-center justify-center font-semibold">4</span>
+                    <div className="flex items-start space-x-2">
+                      <span className="flex-shrink-0 w-5 h-5 bg-gray-600 dark:bg-gray-400 text-white dark:text-gray-900 text-xs rounded-full flex items-center justify-center font-semibold">4</span>
                       <p className="text-gray-700 dark:text-gray-300">Review and confirm the transaction</p>
                     </div>
-                    <div className="flex items-start space-x-3">
-                      <span className="flex-shrink-0 w-6 h-6 bg-gray-600 dark:bg-gray-400 text-white dark:text-gray-900 text-sm rounded-full flex items-center justify-center font-semibold">5</span>
-                      <p className="text-gray-700 dark:text-gray-300">Send tokens to multiple recipients in one transaction</p>
+                    <div className="flex items-start space-x-2">
+                      <span className="flex-shrink-0 w-5 h-5 bg-gray-600 dark:bg-gray-400 text-white dark:text-gray-900 text-xs rounded-full flex items-center justify-center font-semibold">5</span>
+                      <p className="text-gray-700 dark:text-gray-300">Send tokens using smart batch system (automatically splits large lists into optimal batches)</p>
                     </div>
                   </div>
                 </div>
 
-                {/* Data Collection */}
-                <div>
-                  <h3 className="font-semibold text-gray-900 dark:text-white mb-2">Data We Collect:</h3>
-                  <ul className="space-y-1 list-disc list-inside">
-                    <li>Wallet addresses (for transaction processing)</li>
-                    <li>Token amounts (for distribution calculation)</li>
-                    <li>Transaction hash (for verification)</li>
-                    <li>No personal information is stored</li>
-                    <li>All data is processed on-chain</li>
-                  </ul>
+                {/* Features */}
+                <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-2">
+                  <h4 className="font-medium text-purple-900 dark:text-purple-100 text-xs mb-1">🔗 Farcaster Cast Import</h4>
+                  <p className="text-xs text-purple-800 dark:text-purple-200">
+                    Import recipients from any Farcaster cast: users who liked, recasted, or commented on a post
+                  </p>
                 </div>
+                
+                <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-2">
+                  <h4 className="font-medium text-blue-900 dark:text-blue-100 text-xs mb-1">⚡ Smart Batch System</h4>
+                  <p className="text-xs text-blue-800 dark:text-blue-200">
+                    Automatically splits large recipient lists into optimal batches with retry and continue functionality
+                  </p>
+                </div>
+                
+             
+
+                {/* Data Collection */}
+            
 
                 {/* APIs & Integrations */}
                 <div>
-                  <h3 className="font-semibold text-gray-900 dark:text-white mb-2">APIs & Integrations:</h3>
-                  <div className="space-y-3">
-                    <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3">
-                      <div className="flex items-center space-x-2 mb-2">
-                        <div className="w-6 h-6 bg-blue-600 rounded-full flex items-center justify-center">
+                  <h3 className="font-semibold text-gray-900 dark:text-white mb-2 text-sm">APIs & Integrations:</h3>
+                  <div className="space-y-2">
+                    <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-2">
+                      <div className="flex items-center space-x-2 mb-1">
+                        <div className="w-5 h-5 bg-blue-600 rounded-full flex items-center justify-center">
                           <span className="text-white text-xs font-bold">D</span>
                         </div>
-                        <h4 className="font-medium text-blue-900 dark:text-blue-100">Dune API</h4>
+                        <h4 className="font-medium text-blue-900 dark:text-blue-100 text-xs">Dune API</h4>
                       </div>
-                      <p className="text-sm text-blue-800 dark:text-blue-200">
+                      <p className="text-xs text-blue-800 dark:text-blue-200">
                         Fetches your token balances and metadata from blockchain data.
                       </p>
                     </div>
                     
-                    <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-3">
-                      <div className="flex items-center space-x-2 mb-2">
-                        <div className="w-6 h-6 bg-purple-600 rounded-full flex items-center justify-center">
+                    <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-2">
+                      <div className="flex items-center space-x-2 mb-1">
+                        <div className="w-5 h-5 bg-purple-600 rounded-full flex items-center justify-center">
                           <span className="text-white text-xs font-bold">N</span>
                         </div>
-                        <h4 className="font-medium text-purple-900 dark:text-purple-100">Neynar API</h4>
+                        <h4 className="font-medium text-purple-900 dark:text-purple-100 text-xs">Neynar API</h4>
                       </div>
-                      <p className="text-sm text-purple-800 dark:text-purple-200">
+                      <p className="text-xs text-purple-800 dark:text-purple-200">
                         Resolves Farcaster usernames (@username) to wallet addresses.
                       </p>
                     </div>
                     
-                    <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-3">
-                      <div className="flex items-center space-x-2 mb-2">
-                        <div className="w-6 h-6 bg-green-600 rounded-full flex items-center justify-center">
+                    <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-2">
+                      <div className="flex items-center space-x-2 mb-1">
+                        <div className="w-5 h-5 bg-green-600 rounded-full flex items-center justify-center">
                           <span className="text-white text-xs font-bold">B</span>
                         </div>
-                        <h4 className="font-medium text-green-900 dark:text-green-100">Base.eth Resolution</h4>
+                        <h4 className="font-medium text-green-900 dark:text-green-100 text-xs">Base.eth Resolution</h4>
                       </div>
-                      <p className="text-sm text-green-800 dark:text-green-200">
+                      <p className="text-xs text-green-800 dark:text-green-200">
                         Resolves .base.eth domains to Ethereum addresses.
                       </p>
                     </div>
@@ -403,19 +419,19 @@ export default function HomePage() {
 
                 {/* Fees */}
                 <div>
-                  <h3 className="font-semibold text-gray-900 dark:text-white mb-2">Fees:</h3>
-                  <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3">
-                    <div className="space-y-2">
+                  <h3 className="font-semibold text-gray-900 dark:text-white mb-2 text-sm">Fees:</h3>
+                  <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-2">
+                    <div className="space-y-1">
                       <div className="flex justify-between items-center">
                         <span>Platform Fee:</span>
-                        <span className="font-medium text-[#5638a1]">0.1 USD per recipient</span>
+                        <span className="font-medium text-[#5638a1]">Fixed per transaction</span>
                       </div>
                       <div className="flex justify-between items-center">
                         <span>Network Fee:</span>
-                        <span className="text-gray-600 dark:text-gray-400">Variable (Base network)</span>
+                        <span className="text-gray-600 dark:text-gray-400">Variable (Base network gas)</span>
                       </div>
-                      <div className="text-xs text-gray-600 dark:text-gray-400 mt-2">
-                        * Fee is calculated based on the number of recipients, not the amount sent
+                      <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                        * Platform fee is fixed per transaction, not per recipient. Batch system optimizes costs for large lists.
                       </div>
                     </div>
                   </div>
@@ -423,40 +439,38 @@ export default function HomePage() {
 
                 {/* Limits */}
                 <div>
-                  <h3 className="font-semibold text-gray-900 dark:text-white mb-2">Limits:</h3>
+                  <h3 className="font-semibold text-gray-900 dark:text-white mb-2 text-sm">Limits:</h3>
                   <ul className="space-y-1 list-disc list-inside">
-                    <li>ETH: Up to 300 recipients per transaction</li>
-                    <li>ERC20: Up to 200 recipients per transaction</li>
+                    <li>ETH: Up to 300 recipients per batch (unlimited total with batch system)</li>
+                    <li>ERC20: Up to 200 recipients per batch (unlimited total with batch system)</li>
                     <li>Minimum amount: 0.000001 tokens</li>
+                    <li>Farcaster cast import: Up to 3000 reactions + 500 comments per cast</li>
                   </ul>
                 </div>
 
                 {/* Security */}
                 <div>
-                  <h3 className="font-semibold text-gray-900 dark:text-white mb-2">Security:</h3>
+                  <h3 className="font-semibold text-gray-900 dark:text-white mb-2 text-sm">Security:</h3>
                   <ul className="space-y-1 list-disc list-inside">
                     <li>Smart contract is verified</li>
-                    <li>No private keys are stored</li>
                     <li>All transactions are transparent on-chain</li>
-                    <li>You maintain full control of your wallet</li>
                   </ul>
                 </div>
 
                 {/* Support */}
                 <div>
-                  <h3 className="font-semibold text-gray-900 dark:text-white mb-2">Support:</h3>
-                  <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3">
+                  <h3 className="font-semibold text-gray-900 dark:text-white mb-2 text-sm">Support:</h3>
+                  <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-2">
                     <div className="flex items-center space-x-2">
-                    
                       <div>
-                        <p className="text-sm text-gray-700 dark:text-gray-300">
-                          For support and questions, contact us on Farcaster:
+                        <p className="text-xs text-gray-700 dark:text-gray-300">
+                          For support and questions
                         </p>
                         <a 
                           href="https://farcaster.xyz/codexsha" 
                           target="_blank" 
                           rel="noopener noreferrer"
-                          className="text-[#5638a1] hover:text-[#5638a1]/80 font-medium text-sm"
+                          className="text-[#5638a1] hover:text-[#5638a1]/80 font-medium text-xs"
                         >
                           @codexsha
                         </a>

@@ -14,7 +14,7 @@ export const SUPPORTED_CHAINS: ChainInfo[] = [
     id: 8453,
     name: "Base",
     symbol: "ETH",
-    rpcUrl: "https://mainnet.base.org",
+    rpcUrl: "https://base-mainnet.g.alchemy.com/v2/ugljTHB-omeuc6XeIVJg9",
     blockExplorer: "https://basescan.org",
     contractAddress: "0x25Fb9aa597cEF96a96B39482548105d6c8D452eb",
     isTestnet: false,
