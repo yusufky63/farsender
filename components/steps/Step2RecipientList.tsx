@@ -1784,7 +1784,7 @@ export function Step2RecipientList({
         )}
 
         {/* Navigation */}
-        <div className="flex justify-between">
+        <div className="flex justify-between mt-2">
           <Button variant="outline" onClick={onPrev} size="sm">
             Back
           </Button>

@@ -274,7 +274,7 @@ export function Step4Review({ config, onConfigChange, onNext, onPrev }: StepProp
         )}
 
         {/* Navigation */}
-        <div className="flex justify-between">
+        <div className="flex justify-between mt-2">
           <Button
             variant="outline"
             onClick={onPrev}

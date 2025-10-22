@@ -285,7 +285,7 @@ export function Step3AmountConfig({ config, onConfigChange, onNext, onPrev }: St
         )}
 
         {/* Navigation */}
-        <div className="flex justify-between">
+        <div className="flex justify-between mt-2">
           <Button
             variant="outline"
             onClick={onPrev}

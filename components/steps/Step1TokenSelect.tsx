@@ -58,8 +58,8 @@ export function Step1TokenSelect({ config, onConfigChange, onNext }: StepProps) 
     onConfigChange({
       ...config,
       tokenType: isNative ? 'ETH' : 'ERC20',
-      // Set zero address for native tokens as a stable placeholder
-      tokenAddress: isNative ? '0x0000000000000000000000000000000000000000' : token.contractAddress,
+      // Set 'native' for ETH tokens as a stable placeholder
+      tokenAddress: isNative ? 'native' : token.contractAddress,
       tokenSymbol: token.symbol,
       tokenName: token.name,
       tokenDecimals: token.decimals
@@ -511,7 +511,7 @@ export function Step1TokenSelect({ config, onConfigChange, onNext }: StepProps) 
         </div>
 
         {/* Navigation */}
-        <div className="flex justify-end pt-2 border-t border-gray-200 dark:border-gray-800">
+        <div className="flex justify-end pt-2 border-t border-gray-200 dark:border-gray-800 mt-2">
           <Button
             onClick={onNext}
             disabled={!canProceed}

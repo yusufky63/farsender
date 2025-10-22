@@ -30,10 +30,10 @@ export interface BatchProgress {
   progress: number // 0-100
 }
 
-// Batch size limits based on gas and contract constraints
+// Batch size limits must match smart contract limits
 export const BATCH_LIMITS = {
-  ETH: 300,   // ETH transfers
-  ERC20: 200  // ERC20 transfers
+  ETH: 300,   // ETH transfers (matches MAX_ETH_RECIPIENTS in contract)
+  ERC20: 200  // ERC20 transfers (matches MAX_ERC20_RECIPIENTS in contract)
 } as const
 
 /**
@@ -186,21 +186,21 @@ export function formatBatchSummary(batchInfo: BatchInfo): string {
 export function estimateBatchGasCosts(
   batches: BatchInfo[],
   tokenType: 'ETH' | 'ERC20',
-  gasPrice: string = '20' // gwei
+  gasPrice: string = '0.005' // gwei (Base network typical gas price)
 ): {
   totalGasEstimate: string
   costPerBatch: string
   totalCostETH: string
 } {
-  // Rough gas estimates
-  const gasPerRecipient = tokenType === 'ETH' ? 21000 : 65000 // ERC20 transfers cost more
-  const baseGasPerBatch = 50000 // Base transaction cost
+  // Base network optimized gas estimates (much lower than mainnet)
+  const gasPerRecipient = tokenType === 'ETH' ? 23000 : 35000 // Optimized for Base L2
+  const baseGasPerBatch = 25000 // Base transaction cost (reduced for L2)
   
   const totalGas = batches.reduce((total, batch) => {
     return total + baseGasPerBatch + (batch.recipients.length * gasPerRecipient)
   }, 0)
   
-  const gasPriceWei = parseFloat(gasPrice) * 1e9 // Convert gwei to wei
+  const gasPriceWei = parseFloat(gasPrice) * 1e6 // Convert to wei (Base uses much lower gas prices, ~0.001 gwei)
   const totalCostWei = totalGas * gasPriceWei
   const totalCostETH = (totalCostWei / 1e18).toFixed(6)
   
