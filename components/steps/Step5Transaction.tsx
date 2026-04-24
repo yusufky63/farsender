@@ -115,7 +115,6 @@ export function Step5Transaction({
     data: writeContractApprovalData,
     isPending: isWriteContractApprovalPending,
   } = useWriteContract();
-  const { sendCalls } = useSendCalls();
   const [transferHash, setTransferHash] = useState<`0x${string}` | undefined>(
     undefined
   );
@@ -208,7 +207,6 @@ export function Step5Transaction({
   // When transfer hash is set, mark transaction as pending with hash & start a 30s timeout fallback
   const transferTimerRef = useRef<number | null>(null);
   const signingTimerRef = useRef<number | null>(null);
-  const approvalTimerRef = useRef<number | null>(null);
   useEffect(() => {
     if (transferHash) {
       // If we were in signing state, clear it now
@@ -330,135 +328,6 @@ export function Step5Transaction({
     }
   }, [isTransferError]);
 
-  // Note: We now use writeContractAsync which returns the hash directly, so we don't need these useEffects
-
-  const handleApprove = useCallback(async () => {
-    if (!address || !config.tokenAddress || !contractAddress) {
-      console.error("Missing required parameters for approval");
-      return;
-    }
-
-    // Check if we're connected
-    if (!isConnected) {
-      setTransactionStatus({
-        status: "error",
-        error: "Please connect your wallet first",
-      });
-      return;
-    }
-
-    // Do not programmatically switch chains; Farcaster MiniApp may not support it.
-    // Interact directly on Base by specifying chainId in contract calls below.
-
-    try {
-      setApprovalStatus("pending");
-      if (approvalTimerRef.current) {
-        clearTimeout(approvalTimerRef.current);
-        approvalTimerRef.current = null;
-      }
-      approvalTimerRef.current = window.setTimeout(() => {
-        // Timeout safety: stop spinner if nothing happens in 15s
-        setApprovalStatus((prev) => (prev === "pending" ? "error" : prev));
-        setIsApprovalTransaction(false);
-      }, 15_000); // Reduced from 30s to 15s
-
-      // Use a more direct approach to avoid connector issues
-      const approveABI = [
-        {
-          name: "approve",
-          type: "function",
-          stateMutability: "nonpayable",
-          inputs: [
-            { name: "spender", type: "address" },
-            { name: "amount", type: "uint256" },
-          ],
-          outputs: [{ name: "", type: "bool" }],
-        },
-      ] as const;
-
-      try {
-        setIsApprovalTransaction(true);
-        const txHash = await writeContractApprovalAsync({
-          address: config.tokenAddress as `0x${string}`,
-          abi: approveABI,
-          functionName: "approve",
-          args: [contractAddress, requiredAmount],
-          chainId: BASE_CHAIN_ID,
-        });
-        console.log("📝 Approval transaction hash received:", txHash);
-        setApprovalHash(txHash as `0x${string}`);
-      } catch (e: any) {
-        const msg = e?.message || String(e);
-        if (msg.includes("getChainId is not a function")) {
-          // Fallback: send via MiniApp provider directly
-          try {
-            const data = encodeFunctionData({
-              abi: approveABI,
-              functionName: "approve",
-              args: [contractAddress as `0x${string}`, requiredAmount],
-            });
-            const txHash = await MiniAppSDK.wallet.ethProvider.request({
-              method: "eth_sendTransaction",
-              params: [
-                {
-                  from: address,
-                  to: config.tokenAddress as `0x${string}`,
-                  data,
-                  value: "0x0",
-                },
-              ],
-            });
-            setIsApprovalTransaction(true);
-            setApprovalHash(txHash as `0x${string}`);
-          } catch (fe: any) {
-            // User rejected via MiniApp provider
-            setApprovalStatus("error");
-            setIsApprovalTransaction(false);
-            if (approvalTimerRef.current) {
-              clearTimeout(approvalTimerRef.current);
-              approvalTimerRef.current = null;
-            }
-            return;
-          }
-        } else {
-          throw e;
-        }
-      }
-    } catch (error) {
-      console.error("Approve failed:", error);
-      setApprovalStatus("error");
-      setIsApprovalTransaction(false);
-      const errorMessage =
-        error instanceof Error ? error.message : "Approve failed";
-      const errorName = (error as any)?.name as string | undefined;
-      // If user rejected, do not show transfer error UI
-      if (
-        (typeof errorMessage === "string" &&
-          (errorMessage.includes("User rejected") ||
-            errorMessage.includes("User denied") ||
-            errorMessage.includes("Rejected"))) ||
-        errorName === "RejectedByUser"
-      ) {
-        if (approvalTimerRef.current) {
-          clearTimeout(approvalTimerRef.current);
-          approvalTimerRef.current = null;
-        }
-        return;
-      }
-      if (approvalTimerRef.current) {
-        clearTimeout(approvalTimerRef.current);
-        approvalTimerRef.current = null;
-      }
-      // Keep transactionStatus untouched for approval errors to avoid showing transfer error UI
-    }
-  }, [
-    address,
-    config.tokenAddress,
-    contractAddress,
-    writeContractApprovalAsync,
-    requiredAmount,
-    isConnected,
-  ]);
 
   // Handle approval separately
   const handleApproval = useCallback(async () => {
