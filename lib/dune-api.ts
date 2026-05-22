@@ -213,13 +213,15 @@ export class DuneAPI {
   }
 
   // Get specific token info and balance for a user
-  async getTokenInfo(tokenAddress: string, userAddress?: string): Promise<DuneTokenInfo | null> {
+  async getTokenInfo(tokenAddress: string, userAddress?: string, chainId = 1): Promise<DuneTokenInfo | null> {
     try {
+      this.validateChainId(chainId)
+
       if (!userAddress) {
         throw new Error('User address is required')
       }
 
-      const url = `${this.baseUrl}/v1/evm/balances/${userAddress}?chain_ids=1&metadata=logo,url&limit=1000`
+      const url = `${this.baseUrl}/v1/evm/balances/${userAddress}?chain_ids=${chainId}&metadata=logo,url&limit=1000`
 
       console.log('🌐 Dune API Request for token info:', { url, tokenAddress })
 

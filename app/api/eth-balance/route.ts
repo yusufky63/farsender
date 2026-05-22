@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { isAddress } from 'viem'
 import { AlchemyAPI } from '@/lib/alchemy-api'
 import { getChainInfo } from '@/lib/chains'
 
@@ -11,6 +12,13 @@ export async function GET(request: NextRequest) {
     if (!address || !chainId) {
       return NextResponse.json(
         { error: 'Address and chainId are required' },
+        { status: 400 }
+      )
+    }
+
+    if (!isAddress(address)) {
+      return NextResponse.json(
+        { error: 'Invalid address' },
         { status: 400 }
       )
     }

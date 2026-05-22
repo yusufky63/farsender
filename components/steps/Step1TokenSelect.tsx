@@ -11,7 +11,7 @@ import { useTokenList, TokenInfo as TokenListInfo } from '@/hooks/useTokenList'
 import { DuneTokenInfo } from '@/lib/dune-api'
 
 export function Step1TokenSelect({ config, onConfigChange, onNext }: StepProps) {
-  const { address } = useAccount()
+  const { address, chain } = useAccount()
   const [selectedToken, setSelectedToken] = useState<TokenListInfo | null>(null)
   const [customTokenAddress, setCustomTokenAddress] = useState('')
   const [tokenError, setTokenError] = useState('')
@@ -81,17 +81,29 @@ export function Step1TokenSelect({ config, onConfigChange, onNext }: StepProps) 
         return
       }
 
-      // Fetch token info from Dune API
-      const duneApiKey = process.env.NEXT_PUBLIC_DUNE_API_KEY
-      if (!duneApiKey) {
-        throw new Error('Dune API key not configured')
+      if (!address || !chain) {
+        throw new Error('Connect your wallet first')
       }
 
-      const { DuneAPI } = await import('@/lib/dune-api')
-      const dune = new DuneAPI(duneApiKey)
-      
-      // Get token info and balance
-      const tokenInfo: DuneTokenInfo | null = await dune.getTokenInfo(customTokenAddress, address)
+      const response = await fetch('/api/dune', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'getTokenInfo',
+          tokenAddress: customTokenAddress,
+          userAddress: address,
+          chainId: chain.id,
+        }),
+      })
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => null)
+        throw new Error(data?.error || 'Failed to load token information')
+      }
+
+      const { token: tokenInfo }: { token: DuneTokenInfo | null } = await response.json()
       
       if (!tokenInfo) {
         throw new Error('Token not found or you don\'t have this token')

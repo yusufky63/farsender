@@ -44,15 +44,24 @@ export function useTokenList() {
       setError(null)
 
       try {
-        // Use Dune API directly from frontend
-        const duneApiKey = process.env.NEXT_PUBLIC_DUNE_API_KEY
-        if (!duneApiKey) {
-          throw new Error('Dune API key not configured')
+        const response = await fetch('/api/dune', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            action: 'getAllTokens',
+            address,
+            chainId: chain.id,
+          }),
+        })
+
+        if (!response.ok) {
+          const data = await response.json().catch(() => null)
+          throw new Error(data?.error || 'Failed to fetch tokens')
         }
 
-        const { DuneAPI } = await import('@/lib/dune-api')
-        const dune = new DuneAPI(duneApiKey)
-        const tokens = await dune.getAllTokens(address, chain.id)
+        const { tokens } = await response.json()
         
         // Process tokens to handle native token contract addresses
         const processedTokens = tokens.map(token => ({
